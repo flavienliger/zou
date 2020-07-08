@@ -901,6 +901,7 @@ class FileResource(Resource):
 
     @jwt_required
     def get(self, file_id):
+        # TODO: search in dependent / children file
         try:
             file_dict = files_service.get_working_file(file_id)
             task = tasks_service.get_task(file_dict["task_id"])
@@ -963,4 +964,74 @@ class EntityWorkingFilesResource(Resource):
 
         return files_service.get_working_files_for_entity(
             entity_id, task_id=task_id, name=name
+        )
+
+
+# --------------------------
+
+
+class NewChildrenFilesResource(Resource, ArgsMixin):
+
+    @jwt_required
+    def post(self, file_id):
+        args = self.get_arguments()
+
+        try:
+            file_dict = files_service.get_output_file(file_id)
+            entity = entities_service.get_entity(file_dict["entity_id"])
+            user_service.check_project_access(entity["project_id"])
+            user_service.check_entity_access(entity["id"])
+
+            new_children = files_service.create_new_children(
+                file_id,
+                args["output_type_id"],
+                size=args["size"],
+                file_status_id=args["file_status_id"],
+                temporal_entity_id=args["temporal_entity_id"]
+            )
+        except EntryAlreadyExistsException:
+            return {"error": "The given children file already exists."}, 400
+
+        return new_children, 201
+
+    def get_arguments(self):
+        return self.get_args(
+            [
+                ("output_type_id", "", True),
+                ("size", None, False),
+                ("file_status_id", None, False),
+                ("temporal_entity_id", None, False),
+            ]
+        )
+
+
+class NewDependentFilesResource(Resource, ArgsMixin):
+
+    @jwt_required
+    def post(self, file_id):
+        args = self.get_arguments()
+        
+        try:
+            file_dict = files_service.get_output_file(file_id)
+            entity = entities_service.get_entity(file_dict["entity_id"])
+            user_service.check_project_access(entity["project_id"])
+
+            new_dependent = files_service.create_new_dependent(
+                file_id,
+                args["path"],
+                checksum=args["checksum"],
+                size=args["size"]
+            )
+        except EntryAlreadyExistsException:
+            return {"error": "The given dependent file already exists."}, 400
+
+        return new_dependent, 201
+
+    def get_arguments(self):
+        return self.get_args(
+            [
+                ("path", "", True),
+                ("checksum", None, False),
+                ("size", None, False),
+            ]
         )

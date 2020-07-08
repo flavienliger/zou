@@ -59,7 +59,7 @@ def get_output_file(output_file_id):
     """
     Return given output file as a dict.
     """
-    return get_output_file_raw(output_file_id).serialize()
+    return get_output_file_raw(output_file_id).serialize(relations=True)
 
 
 def get_software_raw(software_id):

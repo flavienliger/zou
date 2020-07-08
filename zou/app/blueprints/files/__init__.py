@@ -26,6 +26,8 @@ from .resources import (
     SetTreeResource,
     FileResource,
     WorkingFileFileResource,
+    NewChildrenFilesResource,
+    NewDependentFilesResource,
 )
 
 routes = [
@@ -104,7 +106,10 @@ routes = [
         "/actions/working-files/<working_file_id>/comment",
         CommentWorkingFileResource,
     ),
-    ("/actions/working-files/<working_file_id>/modified", ModifiedFileResource)
+    ("/actions/working-files/<working_file_id>/modified", ModifiedFileResource),
+    
+    ("/data/files/<file_id>/children-files/new", NewChildrenFilesResource),
+    ("/data/files/<file_id>/dependent-files/new", NewDependentFilesResource),
 ]
 
 blueprint = Blueprint("files", "files")
