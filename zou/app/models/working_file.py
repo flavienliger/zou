@@ -13,6 +13,7 @@ class WorkingFile(db.Model, BaseMixin, SerializerMixin):
     Describes the file related to the work done on a given task. It is
     used as source of output files published for a given entity.
     """
+    __tablename__ = "working_file"
 
     shotgun_id = db.Column(db.Integer(), index=True)
 

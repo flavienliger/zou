@@ -2,32 +2,52 @@ from sqlalchemy.orm import relationship
 from sqlalchemy_utils import UUIDType
 
 from zou.app import db
-from zou.app.models.serializer import SerializerMixin
+from zou.app.models.serializer import OutputFileSerializer
 from zou.app.models.base import BaseMixin
 
 from sqlalchemy.dialects.postgresql import JSONB
 
 
-class OutputFile(db.Model, BaseMixin, SerializerMixin):
+dependent_table = db.Table(
+    "dependent_link", 
+    db.Column(
+        "output_file_id",
+        UUIDType(binary=False),
+        db.ForeignKey("output_file.id"),
+        primary_key=True,
+    ),
+    db.Column(
+        "dependent_file_id",
+        UUIDType(binary=False),
+        db.ForeignKey("dependent_file.id"),
+        primary_key=True,
+    )
+)
+
+
+class OutputFile(db.Model, BaseMixin, OutputFileSerializer):
     """
     Describe a file generated from a CG artist scene. It's the result of a
     publication.
-    It is linked to a working file, an entity and a task type.
+    It is linked to a working/ children/ dependent file, an entity and a task type.
     """
+    __tablename__ = "output_file"
 
     shotgun_id = db.Column(db.Integer())
 
     name = db.Column(db.String(250), nullable=False)
-    canceled = db.Column(db.Boolean(), default=False, nullable=False)
+    canceled = db.Column(db.Boolean(), default=False, nullable=False) # surement une forme d'"omit"
     size = db.Column(db.Integer())
     checksum = db.Column(db.String(32))
     description = db.Column(db.Text())
     comment = db.Column(db.Text())
     extension = db.Column(db.String(10))
-    revision = db.Column(db.Integer(), nullable=False)
-    representation = db.Column(db.String(20), index=True)
-    nb_elements = db.Column(db.Integer(), default=1)
-    source = db.Column(db.String(40))
+    revision = db.Column(db.Integer(), nullable=False) # version
+    representation = db.Column(db.String(20), index=True) # une manière de regrouper (ex: par extension)
+    nb_elements = db.Column(db.Integer(), default=1) # à refaire, pas de start-end
+    frame_start = db.Column(db.Integer(), default=1)
+    frame_end = db.Column(db.Integer(), default=1)
+    source = db.Column(db.String(40)) # permet de dire d'où ça vient (ex: muster)
     path = db.Column(db.String(400))
     data = db.Column(JSONB)
 
@@ -48,7 +68,22 @@ class OutputFile(db.Model, BaseMixin, SerializerMixin):
     source_file_id = db.Column(
         UUIDType(binary=False), db.ForeignKey("working_file.id")
     )
-    source_file = relationship("WorkingFile", back_populates="outputs")
+    source_file = relationship(
+        "WorkingFile", 
+        lazy="joined", 
+        back_populates="outputs"
+    )
+    children_files = relationship(
+        "ChildrenFile", 
+        lazy="joined", 
+        backref="parent_file"
+    )
+    # TODO: by default not serialize it
+    dependent_files = relationship(
+        "DependentFile",
+        secondary=dependent_table,
+        back_populates="used_by"
+    )
     temporal_entity_id = db.Column(
         UUIDType(binary=False),
         db.ForeignKey("entity.id"),
