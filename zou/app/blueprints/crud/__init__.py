@@ -20,6 +20,8 @@ from .milestone import MilestonesResource, MilestoneResource
 from .notification import NotificationsResource, NotificationResource
 from .organisation import OrganisationsResource, OrganisationResource
 from .output_file import OutputFilesResource, OutputFileResource
+from .children_file import ChildrenFilesResource, ChildrenFileResource
+from .dependent_file import DependentFilesResource, DependentFileResource
 from .output_type import OutputTypeResource, OutputTypesResource
 from .news import NewssResource, NewsResource
 from .person import PersonResource, PersonsResource
@@ -65,6 +67,10 @@ routes = [
     ("/data/softwares/<instance_id>", SoftwareResource),
     ("/data/output-files", OutputFilesResource),
     ("/data/output-files/<instance_id>", OutputFileResource),
+    ("/data/children-files", ChildrenFilesResource),
+    ("/data/children-files/<instance_id>", ChildrenFileResource),
+    ("/data/dependent-files", DependentFilesResource),
+    ("/data/dependent-files/<instance_id>", DependentFileResource),
     ("/data/output-types", OutputTypesResource),
     ("/data/output-types/<instance_id>", OutputTypeResource),
     ("/data/preview-files", PreviewFilesResource),
