@@ -187,3 +187,83 @@ def get_next_working_file_revision(task_id, name):
         revision = 1
     return revision
 
+
+# ----------------------------------
+
+def get_default_children_status():
+    """
+    Return default file status to set on a file when it is created.
+    """
+    default_status = FileStatus.get_by(name=app.config["DEFAULT_FILE_CHILDREN_STATUS"])
+    if default_status is None:
+        default_status = FileStatus(
+            name=app.config["DEFAULT_FILE_CHILDREN_STATUS"], color="#FFFFFF"
+        )
+        default_status.save()
+    return default_status.serialize()
+
+
+def create_new_children(
+    output_file_id, 
+    output_type_id, 
+    size=None,
+    file_status_id=None, 
+    temporal_entity_id=None
+):
+    file_status_id = file_status_id or get_default_children_status()["id"]
+
+    try:
+        children_file = ChildrenFile.get_by(
+            parent_file_id=output_file_id,
+            output_type_id=output_type_id,
+        )
+        
+        if children_file is None:
+            children_file = ChildrenFile.create(
+                parent_file_id=output_file_id,
+                output_type_id=output_type_id,
+                size=size,
+                file_status_id=file_status_id,
+                temporal_entity_id=temporal_entity_id,
+            )
+            events.emit("children_file:new", {"children_file_id": children_file.id})
+        else:
+            raise EntryAlreadyExistsException
+    except IntegrityError:
+        raise EntryAlreadyExistsException
+    
+    return children_file.serialize()
+
+
+def create_new_dependent(
+    output_file_id, 
+    path,
+    checksum=None,
+    size=None,
+):
+    path = path.replace("\\", "/")
+    output_file = get_instance(OutputFile, output_file_id, OutputFileNotFoundException)
+
+    try:
+        dependent_file = DependentFile.get_by(
+            path=path
+        )
+
+        if dependent_file is None:
+            dependent_file = DependentFile.create(
+                size=size,
+                checksum=checksum,
+                extension=os.path.splitext(path)[1],
+                path=path
+            )
+
+        events.emit("dependent_file:new", {
+            "dependent_file_id": dependent_file.id,
+            "output_file_id": output_file_id
+        })
+        output_file.dependent_files.append(dependent_file)
+        output_file.save()
+    except IntegrityError:
+        raise EntryAlreadyExistsException
+        
+    return dependent_file.serialize()

@@ -116,7 +116,9 @@ def create_new_output_revision(
     name="main",
     comment="",
     extension="",
+    path="",
     nb_elements=1,
+    frame_start=1,
     asset_instance_id=None,
     temporal_entity_id=None,
     file_status_id=None
@@ -170,6 +172,7 @@ def create_new_output_revision(
                 name=name,
                 comment=comment,
                 extension=extension,
+                path=path,
                 representation=representation,
                 revision=revision,
                 entity_id=entity_id,
@@ -180,6 +183,7 @@ def create_new_output_revision(
                 file_status_id=file_status_id,
                 task_type_id=task_type_id,
                 nb_elements=nb_elements,
+                frame_start=frame_start,
                 temporal_entity_id=temporal_entity_id,
             )
             events.emit("output_file:new", {"output_file_id": output_file.id})

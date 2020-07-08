@@ -513,14 +513,13 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
             entity = entities_service.get_entity(entity_id)
             user_service.check_project_access(entity["project_id"])
             output_type = files_service.get_output_type(args["output_type_id"])
-            task_type = tasks_service.get_task_type(args["task_type_id"])
 
             if args["person_id"] is None:
                 person = persons_service.get_current_user()
             else:
                 person = persons_service.get_person(args["person_id"])
 
-            output_file = files_service.create_new_output_revision(
+            output_file_dict = files_service.create_new_output_revision(
                 entity_id,
                 working_file_id,
                 output_type["id"],
@@ -531,22 +530,15 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 comment=args["comment"],
                 representation=args["representation"],
                 extension=args["extension"],
+                path=args["path"],
                 nb_elements=int(args["nb_elements"]),
+                frame_start=int(args["frame_start"]),
                 file_status_id=args['file_status_id'],
             )
 
-            output_file_dict = self.add_path_info(
-                output_file,
-                "output",
-                entity,
-                output_type,
-                task_type=task_type,
-                name=args["name"],
-                extension=args["extension"],
-                representation=args["representation"],
-                separator=args["sep"],
-                nb_elements=int(args["nb_elements"]),
-            )
+            if args["path"]:
+                folder_path, file_name = os.path.split(args["path"])
+                output_file_dict.update({"folder_path": folder_path, "file_name": file_name})
         except OutputTypeNotFoundException:
             return {"error": "Cannot find given output type."}, 400
         except PersonNotFoundException:
@@ -570,55 +562,12 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 ("extension", "", False),
                 ("representation", "", False),
                 ("nb_elements", 1, False),
+                ("frame_start", 1, False),
+                ("path", "", False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
             ]
         )
-
-    def add_path_info(
-        self,
-        output_file,
-        mode,
-        entity,
-        output_type,
-        task_type=None,
-        name="main",
-        extension="",
-        representation="",
-        nb_elements=1,
-        separator="/",
-    ):
-        folder_path = file_tree_service.get_output_folder_path(
-            entity,
-            mode=mode,
-            output_type=output_type,
-            task_type=task_type,
-            revision=output_file["revision"],
-            representation=representation,
-            name=name,
-            sep=separator,
-        )
-        file_name = file_tree_service.get_output_file_name(
-            entity,
-            mode=mode,
-            revision=output_file["revision"],
-            output_type=output_type,
-            task_type=task_type,
-            name=name,
-            nb_elements=nb_elements,
-        )
-
-        output_file = files_service.update_output_file(
-            output_file["id"],
-            {
-                "path": "%s%s%s%s"
-                % (folder_path, separator, file_name, extension)
-            },
-        )
-
-        output_file.update({"folder_path": folder_path, "file_name": file_name})
-
-        return output_file
 
 
 class NewInstanceOutputFileResource(Resource, ArgsMixin):
@@ -650,7 +599,6 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
             asset_instance = assets_service.get_asset_instance(
                 asset_instance_id
             )
-            temporal_entity = entities_service.get_entity(temporal_entity_id)
 
             entity = assets_service.get_asset(asset_instance["asset_id"])
             user_service.check_project_access(entity["project_id"])
@@ -662,7 +610,7 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
             else:
                 person = persons_service.get_person(args["person_id"])
 
-            output_file = files_service.create_new_output_revision(
+            output_file_dict = files_service.create_new_output_revision(
                 asset_instance["asset_id"],
                 working_file_id,
                 output_type["id"],
@@ -672,26 +620,19 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 temporal_entity_id=temporal_entity_id,
                 revision=revision,
                 name=args["name"],
+                path=args["path"],
                 representation=args["representation"],
                 comment=args["comment"],
                 nb_elements=int(args["nb_elements"]),
+                frame_start=int(args["frame_start"]),
                 extension=args["extension"],
                 file_status_id=args['file_status_id'],
             )
 
-            output_file_dict = self.add_path_info(
-                output_file,
-                "output",
-                asset_instance,
-                temporal_entity,
-                output_type,
-                task_type=task_type,
-                name=args["name"],
-                extension=args["extension"],
-                representation=args["representation"],
-                nb_elements=int(args["nb_elements"]),
-                separator=args["sep"],
-            )
+            if args["path"]:
+                folder_path, file_name = os.path.split(args["path"])
+                output_file_dict.update({"folder_path": folder_path, "file_name": file_name})
+            
         except OutputTypeNotFoundException:
             return {"message": "Cannot find given output type."}, 400
         except PersonNotFoundException:
@@ -716,58 +657,11 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 ("representation", "", False),
                 ("is_sequence", False, False),
                 ("nb_elements", 1, False),
+                ("frame_start", 1, False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
             ]
         )
-
-    def add_path_info(
-        self,
-        output_file,
-        mode,
-        asset_instance,
-        temporal_entity,
-        output_type,
-        task_type=None,
-        name="main",
-        extension="",
-        representation="",
-        nb_elements=1,
-        separator="/",
-    ):
-        folder_path = file_tree_service.get_instance_folder_path(
-            asset_instance,
-            temporal_entity,
-            mode=mode,
-            output_type=output_type,
-            revision=output_file["revision"],
-            task_type=task_type,
-            representation=representation,
-            name=name,
-            sep=separator,
-        )
-        file_name = file_tree_service.get_instance_file_name(
-            asset_instance,
-            temporal_entity,
-            mode=mode,
-            revision=output_file["revision"],
-            output_type=output_type,
-            task_type=task_type,
-            name=name,
-        )
-
-        output_file = files_service.update_output_file(
-            output_file["id"],
-            {
-                "path": "%s%s%s%s"
-                % (folder_path, separator, file_name, extension)
-            },
-        )
-
-        output_file.update({"folder_path": folder_path, "file_name": file_name})
-
-        return output_file
-
 
 class GetNextEntityOutputFileRevisionResource(Resource, ArgsMixin):
     """
