@@ -315,7 +315,6 @@ class FileTreeTestCase(ApiDBTestCase):
             revision=3,
             output_type=self.output_type_image,
             nb_elements=50,
-            frame_start=1,
         )
         self.assertEqual(
             file_name,

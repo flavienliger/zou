@@ -228,7 +228,6 @@ class RouteOutputFilesTestCase(ApiDBTestCase):
             "working_file_id": self.working_file_id,
             "extension": ".jpg",
             "nb_elements": 50,
-            "frame_start": 1,
             "name": "special"
         }
         result = self.new_output(data)

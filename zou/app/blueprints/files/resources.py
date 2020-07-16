@@ -532,7 +532,6 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 extension=args["extension"],
                 path=args["path"],
                 nb_elements=int(args["nb_elements"]),
-                frame_start=int(args["frame_start"]),
                 file_status_id=args['file_status_id'],
             )
 
@@ -562,7 +561,6 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 ("extension", "", False),
                 ("representation", "", False),
                 ("nb_elements", 1, False),
-                ("frame_start", 1, False),
                 ("path", "", False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
@@ -624,7 +622,6 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 representation=args["representation"],
                 comment=args["comment"],
                 nb_elements=int(args["nb_elements"]),
-                frame_start=int(args["frame_start"]),
                 extension=args["extension"],
                 file_status_id=args['file_status_id'],
             )
@@ -657,7 +654,6 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 ("representation", "", False),
                 ("is_sequence", False, False),
                 ("nb_elements", 1, False),
-                ("frame_start", 1, False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
             ]

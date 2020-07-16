@@ -126,7 +126,6 @@ def get_output_file_name(
     name="",
     revision=1,
     nb_elements=1,
-    frame_start=1,
 ):
     project = get_project(entity)
     tree = get_tree_from_project(project)
@@ -143,7 +142,7 @@ def get_output_file_name(
     )
 
     if nb_elements > 1:
-        file_name += "_[%s-%s]" % (frame_start, frame_start+nb_elements-1)
+        file_name += "_[%s]" % (nb_elements-1)
 
     return u"%s" % file_name
 
@@ -157,7 +156,6 @@ def get_instance_file_name(
     name="main",
     revision=1,
     nb_elements=1,
-    frame_start=1,
 ):
     asset = entities_service.get_entity(asset_instance["asset_id"])
     project = get_project(temporal_entity)
@@ -176,7 +174,7 @@ def get_instance_file_name(
     )
 
     if nb_elements > 1:
-        file_name += "_[%s-%s]" % (frame_start, frame_start+nb_elements-1)
+        file_name += "_[%s]" % (nb_elements-1)
 
     return u"%s" % file_name
 
