@@ -106,6 +106,13 @@ def get_next_working_revision(task_id, name):
     return revision
 
 
+def get_working_file_by_path(path):
+    res = WorkingFile.query.filter_by(path=path).all()
+    if res:
+        return res[0]
+    return None
+
+
 def create_new_working_revision(
     task_id,
     person_id,
@@ -122,6 +129,11 @@ def create_new_working_revision(
     task = Task.get(task_id)
     if revision == 0:
         revision = get_next_working_revision(task_id, name)
+
+    if path:
+        previous_working_file = get_working_file_by_path(path)
+        if previous_working_file:
+            return previous_working_file.serialize()
 
     try:
         working_file = WorkingFile.create(

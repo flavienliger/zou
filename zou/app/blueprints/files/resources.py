@@ -357,6 +357,7 @@ class NewWorkingFileResource(Resource):
     def post(self, task_id):
         (
             name,
+            path,
             mode,
             description,
             comment,
@@ -370,7 +371,6 @@ class NewWorkingFileResource(Resource):
             task = tasks_service.get_task(task_id)
             user_service.check_project_access(task["project_id"])
             user_service.check_entity_access(task["entity_id"])
-            software = files_service.get_software(software_id)
             tasks_service.assign_task(
                 task_id, persons_service.get_current_user()["id"]
             )
@@ -379,8 +379,6 @@ class NewWorkingFileResource(Resource):
                 revision = files_service.get_next_working_revision(
                     task_id, name
                 )
-
-            path = self.build_path(task, name, revision, software, sep, mode)
 
             working_file = files_service.create_new_working_revision(
                 task_id,
@@ -396,16 +394,6 @@ class NewWorkingFileResource(Resource):
 
         return working_file, 201
 
-    def build_path(self, task, name, revision, software, sep, mode):
-        folder_path = file_tree_service.get_working_folder_path(
-            task, name=name, software=software, mode=mode,
-            revision=revision
-        )
-        file_name = file_tree_service.get_working_file_name(
-            task, name=name, software=software, revision=revision, mode=mode
-        )
-        return "%s%s%s" % (folder_path, sep, file_name)
-
     def get_arguments(self):
         person = persons_service.get_current_user()
         maxsoft = files_service.get_or_create_software("3ds Max", "max", ".max")
@@ -414,6 +402,7 @@ class NewWorkingFileResource(Resource):
         parser.add_argument(
             "name", help="The asset name is required.", required=True
         )
+        parser.add_argument("path", required=True)
         parser.add_argument("description", default="")
         parser.add_argument("mode", default="working")
         parser.add_argument("comment", default="")
@@ -424,6 +413,7 @@ class NewWorkingFileResource(Resource):
         args = parser.parse_args()
         return (
             args["name"],
+            args["path"],
             args["mode"],
             args["description"],
             args["comment"],
