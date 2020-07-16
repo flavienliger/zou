@@ -1,6 +1,30 @@
 .. figure:: https://zou.cg-wire.com/zou.png
    :alt: Zou Logo
 
+
+Local script
+------------
+
+```powershell
+$env:FLASK_DEBUG = 1
+$env:FLASK_APP = 'zou.app'
+$env:DB_PASSWORD = 'Tech3708'
+
+python -m flask run --no-reload
+
+$env:FLASK_APP = 'zou.event_stream:app'
+python -m flask run --no-reload -p 5001 
+# ne fonctionne pas car il faut passer par gevent
+python zou/test.py
+
+
+python zou/cli.py migrate_db
+python zou/cli.py upgrade_db
+
+
+```
+
+
 Zou is the memory of your CG production
 ---------------------------------------
 
