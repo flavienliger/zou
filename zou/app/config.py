@@ -99,6 +99,7 @@ LDAP_FALLBACK = os.getenv("LDAP_FALLBACK", "False").lower() == "true"
 LDAP_IS_AD = os.getenv("LDAP_IS_AD", "False").lower() == "true"
 
 LOGS_MODE = os.getenv("LOGS_MODE", "default")
+LOGS_DSN = os.getenv("LOGS_DSN", "localhost")
 LOGS_HOST = os.getenv("LOGS_HOST", "localhost")
 LOGS_PORT = os.getenv("LOGS_PORT", 2202)
 LOGS_TOKEN = os.getenv("LOGS_TOKEN")
