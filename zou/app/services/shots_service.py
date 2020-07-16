@@ -8,11 +8,10 @@ from zou.app.utils import (
     cache,
     events,
     fields,
-    permissions,
     query as query_utils
 )
 
-from zou.app.models.entity import Entity, EntityVersion
+from zou.app.models.entity import Entity, EntityLink, EntityVersion
 from zou.app.models.playlist import Playlist
 from zou.app.models.project import Project
 from zou.app.models.schedule_item import ScheduleItem
@@ -115,6 +114,10 @@ def get_shots(criterions={}):
     shot_type = get_shot_type()
     criterions["entity_type_id"] = shot_type["id"]
     Sequence = aliased(Entity, name="sequence")
+    is_only_assignation = "assigned_to" in criterions
+    if is_only_assignation:
+        del criterions["assigned_to"]
+
     query = Entity.query
     query = query_utils.apply_criterions_to_db_query(Entity, query, criterions)
     query = (
@@ -125,10 +128,9 @@ def get_shots(criterions={}):
         .order_by(Entity.name)
     )
 
-    if "assigned_to" in criterions:
-        query = query.outerjoin(Task)
+    if is_only_assignation:
+        query = query.outerjoin(Task, Task.entity_id == Entity.id)
         query = query.filter(user_service.build_assignee_filter())
-        del criterions["assigned_to"]
 
     try:
         data = query.all()
@@ -153,9 +155,8 @@ def get_scenes(criterions={}):
     criterions["entity_type_id"] = scene_type["id"]
     Sequence = aliased(Entity, name="sequence")
 
-    if "assigned_to" in criterions:
-        query = query.outerjoin(Task)
-        query = query.filter(user_service.build_assignee_filter())
+    is_only_assignation = "assigned_to" in criterions
+    if is_only_assignation:
         del criterions["assigned_to"]
 
     query = Entity.query
@@ -166,6 +167,11 @@ def get_scenes(criterions={}):
         .add_columns(Project.name)
         .add_columns(Sequence.name)
     )
+
+    if is_only_assignation:
+        query = query.outerjoin(Task, Task.entity_id == Entity.id)
+        query = query.filter(user_service.build_assignee_filter())
+
     try:
         data = query.all()
     except StatementError:  # Occurs when an id is not properly formatted
@@ -770,6 +776,7 @@ def remove_shot(shot_id, force=False):
 
         EntityVersion.delete_all_by(entity_id=shot_id)
         Subscription.delete_all_by(entity_id=shot_id)
+        EntityLink.delete_all_by(entity_in_id=shot_id)
         shot.delete()
         clear_shot_cache(shot_id)
         events.emit("shot:delete", {"shot_id": shot_id})
