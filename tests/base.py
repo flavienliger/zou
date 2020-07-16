@@ -25,6 +25,8 @@ from zou.app.models.milestone import Milestone
 from zou.app.models.notification import Notification
 from zou.app.models.output_file import OutputFile
 from zou.app.models.output_type import OutputType
+from zou.app.models.dependent_file import DependentFile
+from zou.app.models.children_file import ChildrenFile
 from zou.app.models.organisation import Organisation
 from zou.app.models.person import Person
 from zou.app.models.playlist import Playlist
@@ -836,6 +838,43 @@ class ApiDBTestCase(ApiTestCase):
             name=name
         )
         return self.output_file
+
+    def generate_fixture_dependent_file(
+        self, 
+        path="",
+        source_output_file=None,
+        temporal_entity_id=None,
+    ):
+        if source_output_file is None:
+            source_output_file = self.output_file
+            
+        self.dependent_file = DependentFile.create(
+            source_output_file_id=source_output_file.id,
+            path=path,
+            temporal_entity_id=temporal_entity_id
+        )
+        return self.dependent_file
+
+    def generate_fixture_children_file(
+        self, 
+        output_file=None,
+        output_type=None,
+        file_status=None,
+        temporal_entity_id=None,
+    ):
+        if output_file is None:
+            output_file = self.output_file
+
+        if output_type is None:
+            output_type = self.output_type
+
+        self.children_file = ChildrenFile.create(
+            parent_file_id=output_file,
+            output_type_id=output_type.id,
+            file_status_id=self.file_status.id,
+            temporal_entity_id=temporal_entity_id,
+        )
+        return self.children_file
 
     def generate_fixture_output_type(self, name="Geometry", short_name="Geo"):
         self.output_type = OutputType.create(
