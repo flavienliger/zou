@@ -15,6 +15,7 @@ class ChildrenFile(db.Model, BaseMixin, SerializerMixin):
     __tablename__ = "children_file"
 
     size = db.Column(db.Integer())
+    path = db.Column(db.String(400), unique=True)
     parent_file_id = db.Column(
         UUIDType(binary=False), db.ForeignKey('output_file.id')
     )

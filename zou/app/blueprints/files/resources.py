@@ -972,6 +972,7 @@ class NewChildrenFilesResource(Resource, ArgsMixin):
                 file_id,
                 args["output_type_id"],
                 size=args["size"],
+                path=args["path"],
                 file_status_id=args["file_status_id"],
                 temporal_entity_id=args["temporal_entity_id"]
             )
@@ -985,6 +986,7 @@ class NewChildrenFilesResource(Resource, ArgsMixin):
             [
                 ("output_type_id", "", True),
                 ("size", None, False),
+                ("path", None, False),
                 ("file_status_id", None, False),
                 ("temporal_entity_id", None, False),
             ]

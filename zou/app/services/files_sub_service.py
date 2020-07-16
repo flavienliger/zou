@@ -219,6 +219,7 @@ def create_new_children(
     output_file_id, 
     output_type_id, 
     size=None,
+    path=None,
     file_status_id=None, 
     temporal_entity_id=None
 ):
@@ -235,6 +236,7 @@ def create_new_children(
                 parent_file_id=output_file_id,
                 output_type_id=output_type_id,
                 size=size,
+                path=path,
                 file_status_id=file_status_id,
                 temporal_entity_id=temporal_entity_id,
             )
