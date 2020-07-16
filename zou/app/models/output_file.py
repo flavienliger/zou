@@ -45,8 +45,6 @@ class OutputFile(db.Model, BaseMixin, OutputFileSerializer):
     revision = db.Column(db.Integer(), nullable=False) # version
     representation = db.Column(db.String(20), index=True) # une manière de regrouper (ex: par extension)
     nb_elements = db.Column(db.Integer(), default=1) # à refaire, pas de start-end
-    frame_start = db.Column(db.Integer(), default=1)
-    frame_end = db.Column(db.Integer(), default=1)
     source = db.Column(db.String(40)) # permet de dire d'où ça vient (ex: muster)
     path = db.Column(db.String(400))
     data = db.Column(JSONB)
