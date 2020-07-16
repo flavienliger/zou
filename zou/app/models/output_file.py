@@ -14,7 +14,7 @@ dependent_table = db.Table(
         "output_file_id",
         UUIDType(binary=False),
         db.ForeignKey("output_file.id"),
-        primary_key=True,
+        nullable=False
     ),
     db.Column(
         "dependent_file_id",
