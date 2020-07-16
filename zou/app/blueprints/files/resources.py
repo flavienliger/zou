@@ -518,6 +518,7 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 revision=revision,
                 name=args["name"],
                 comment=args["comment"],
+                render_info=args["render_info"],
                 representation=args["representation"],
                 extension=args["extension"],
                 path=args["path"],
@@ -550,6 +551,7 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 ("revision", 0, False),
                 ("extension", "", False),
                 ("representation", "", False),
+                ("render_info", None, False),
                 ("nb_elements", 1, False),
                 ("path", "", False),
                 ("sep", "/", False),
@@ -609,6 +611,7 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 revision=revision,
                 name=args["name"],
                 path=args["path"],
+                render_info=args["render_info"],
                 representation=args["representation"],
                 comment=args["comment"],
                 nb_elements=int(args["nb_elements"]),
@@ -644,6 +647,7 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 ("representation", "", False),
                 ("is_sequence", False, False),
                 ("nb_elements", 1, False),
+                ("render_info", None, False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
             ]
@@ -973,6 +977,7 @@ class NewChildrenFilesResource(Resource, ArgsMixin):
                 args["output_type_id"],
                 size=args["size"],
                 path=args["path"],
+                render_info=args["render_info"],
                 file_status_id=args["file_status_id"],
                 temporal_entity_id=args["temporal_entity_id"]
             )
@@ -987,6 +992,7 @@ class NewChildrenFilesResource(Resource, ArgsMixin):
                 ("output_type_id", "", True),
                 ("size", None, False),
                 ("path", None, False),
+                ("render_info", None, False),
                 ("file_status_id", None, False),
                 ("temporal_entity_id", None, False),
             ]

@@ -25,6 +25,7 @@ class ChildrenFile(db.Model, BaseMixin, SerializerMixin):
     file_status_id = db.Column(
         UUIDType(binary=False), db.ForeignKey("file_status.id"), nullable=False
     )
+    render_info = db.Column(db.String(200))
     temporal_entity_id = db.Column(
         UUIDType(binary=False),
         db.ForeignKey("entity.id"),
