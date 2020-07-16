@@ -17,12 +17,9 @@ class SerializerMixin(object):
         obj_dict = {}
 
         if relations:
-            for attr in attrs:
-                current = getattr(self, attr)
-                if type(current) == InstrumentedList:
-                    obj_dict[attr] = [el.serialize() for el in current]
-                else:
-                    obj_dict[attr] = serialize_value(current)
+            obj_dict = {
+                attr: serialize_value(getattr(self, attr)) for attr in attrs
+            }
         else:
             obj_dict = {
                 attr: serialize_value(getattr(self, attr))
@@ -70,3 +67,10 @@ class OutputFileSerializer(object):
             }
         obj_dict["type"] = obj_type or type(self).__name__
         return obj_dict
+        
+    @staticmethod
+    def serialize_list(models, obj_type=None, relations=False):
+        return [
+            model.serialize(obj_type=obj_type, relations=relations)
+            for model in models
+        ]
