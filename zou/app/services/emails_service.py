@@ -8,8 +8,15 @@ from zou.app.services import (
     projects_service,
     tasks_service,
 )
-from zou.app.stores import queue_store
+from zou.app.celery import celery
 
+@celery.task
+def send_email(subject, message, email):
+    emails.send_email(subject, message, email)
+
+@celery.task
+def send_to_slack(token, user, message):
+    chats.send_to_slack(token, user, message)
 
 def send_notification(person_id, subject, messages):
     """
@@ -21,10 +28,7 @@ def send_notification(person_id, subject, messages):
     slack_message = messages["slack_message"]
     if person["notifications_enabled"]:
         if config.ENABLE_JOB_QUEUE:
-            queue_store.job_queue.enqueue(
-                emails.send_email,
-                args=(subject, email_message + get_signature(), person["email"]),
-            )
+            send_email.delay(subject, email_message + get_signature(), person["email"])
         else:
             emails.send_email(
                 subject, email_message + get_signature(), person["email"]
@@ -35,9 +39,7 @@ def send_notification(person_id, subject, messages):
         userid = person["notifications_slack_userid"]
         token = organisation.get("chat_token_slack", "")
         if config.ENABLE_JOB_QUEUE:
-            queue_store.job_queue.enqueue(
-                chats.send_to_slack, args=(token, userid, slack_message)
-            )
+            send_to_slack.delay(chats.send_to_slack, token, userid, slack_message)
         else:
             chats.send_to_slack(token, userid, slack_message)
 

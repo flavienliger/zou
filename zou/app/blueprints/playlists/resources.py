@@ -16,7 +16,7 @@ from zou.app.services import (
     shots_service,
     user_service,
 )
-from zou.app.stores import file_store, queue_store
+from zou.app.celery import celery
 from zou.app.utils import fs
 
 
@@ -112,6 +112,11 @@ class PlaylistDownloadResource(Resource):
                 attachment_filename=attachment_filename,
             )
 
+# TODO: not the best place
+@celery.task
+def build_playlist_job(playlist, email):
+    playlists_service.build_playlist_job(playlist, email)
+
 
 class BuildPlaylistMovieResource(Resource):
     @jwt_required
@@ -121,11 +126,7 @@ class BuildPlaylistMovieResource(Resource):
 
         if config.ENABLE_JOB_QUEUE:
             current_user = persons_service.get_current_user()
-            queue_store.job_queue.enqueue(
-                playlists_service.build_playlist_job,
-                args=(playlist, current_user["email"]),
-                job_timeout=7200,
-            )
+            build_playlist_job.delay(playlist, current_user["email"])
             return {"job": "running"}
         else:
             playlists_service.build_playlist_movie_file(playlist)

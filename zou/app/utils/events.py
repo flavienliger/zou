@@ -73,12 +73,10 @@ def emit(event, data={}, persist=True):
 
     for func in event_handlers.values():
         if ENABLE_JOB_QUEUE:
-            from zou.app.stores.queue_store import job_queue
-
-            job_queue.enqueue(func.handle_event, data)
+            func.delay(data)
         else:
             try:
-                func.handle_event(data)
+                func(data)
             except Exception:
                 current_app.logger.error("Error handling event", exc_info=1)
 
