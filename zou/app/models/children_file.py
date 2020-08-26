@@ -22,10 +22,20 @@ class ChildrenFile(db.Model, BaseMixin, SerializerMixin):
     output_type_id = db.Column(
         UUIDType(binary=False), db.ForeignKey("output_type.id"), index=True
     )
+    output_type = relationship(
+        "OutputType", 
+        lazy="joined"
+    )
     file_status_id = db.Column(
         UUIDType(binary=False), db.ForeignKey("file_status.id"), nullable=False
     )
     render_info = db.Column(db.String(200))
+    file_status = relationship(
+        "FileStatus",
+        lazy="joined"
+    )
+    render_info = db.Column(db.String(200))
+    data = db.Column(JSONB)
     temporal_entity_id = db.Column(
         UUIDType(binary=False),
         db.ForeignKey("entity.id"),
