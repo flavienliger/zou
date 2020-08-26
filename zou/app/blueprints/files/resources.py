@@ -365,6 +365,7 @@ class NewWorkingFileResource(Resource):
             software_id,
             revision,
             sep,
+            size
         ) = self.get_arguments()
 
         try:
@@ -410,6 +411,7 @@ class NewWorkingFileResource(Resource):
         parser.add_argument("software_id", default=maxsoft["id"])
         parser.add_argument("revision", default=0, type=int)
         parser.add_argument("sep", default="/")
+        parser.add_argument("size", default=None, type=int)
         args = parser.parse_args()
         return (
             args["name"],
@@ -421,6 +423,7 @@ class NewWorkingFileResource(Resource):
             args["software_id"],
             args["revision"],
             args["sep"],
+            args["size"],
         )
 
 
@@ -515,6 +518,7 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 output_type["id"],
                 person["id"],
                 args["task_type_id"],
+                size=args["size"],
                 revision=revision,
                 name=args["name"],
                 comment=args["comment"],
@@ -556,6 +560,7 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 ("path", "", False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
+                ("size", None, False),
             ]
         )
 
@@ -734,7 +739,9 @@ class LastEntityOutputFilesResource(Resource):
             output_type_id=request.args.get("output_type_id", None),
             task_type_id=request.args.get("task_type_id", None),
             representation=request.args.get("representation", None),
-            file_status_id=request.args.get("file_status_id", None)
+            file_status_id=request.args.get("file_status_id", None),
+            created_at_since=request.args.get("created_at_since", None),
+            person_id=request.args.get("person_id", None),
         )
 
 
@@ -756,7 +763,9 @@ class LastInstanceOutputFilesResource(Resource):
             output_type_id=request.args.get("output_type_id", None),
             task_type_id=request.args.get("task_type_id", None),
             representation=request.args.get("representation", None),
-            file_status_id=request.args.get("file_status_id", None)
+            file_status_id=request.args.get("file_status_id", None),
+            created_at_since=request.args.get("created_at_since", None),
+            person_id=request.args.get("person_id", None),
         )
 
 
@@ -843,6 +852,8 @@ class EntityOutputFilesResource(Resource):
         name = request.args.get("name")
         representation = request.args.get("representation")
         file_status_id = request.args.get("file_status_id")
+        created_at_since = request.args.get("created_at_since")
+        person_id = request.args.get("person_id")
 
         return files_service.get_output_files_for_entity(
             entity["id"],
@@ -851,6 +862,8 @@ class EntityOutputFilesResource(Resource):
             name=name,
             representation=representation,
             file_status_id=file_status_id,
+            created_at_since=created_at_since,
+            person_id=person_id,
         )
 
 
@@ -871,6 +884,8 @@ class InstanceOutputFilesResource(Resource):
         name = request.args.get("name")
         representation = request.args.get("representation")
         file_status_id = request.args.get("file_status_id")
+        created_at_since = request.args.get("created_at_since")
+        person_id = request.args.get("person_id")
 
         return files_service.get_output_files_for_instance(
             asset_instance["id"],
@@ -880,6 +895,8 @@ class InstanceOutputFilesResource(Resource):
             name=name,
             representation=representation,
             file_status_id=file_status_id,
+            created_at_since=created_at_since,
+            person_id=person_id,
         )
 
 
