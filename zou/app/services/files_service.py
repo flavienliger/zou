@@ -24,6 +24,7 @@ from zou.app.services.exception import (
 
 from zou.app.utils import cache, fields, events, query as query_utils
 
+import datetime
 from sqlalchemy import desc, func
 from sqlalchemy.exc import StatementError, IntegrityError
 from sqlalchemy.sql.expression import and_
@@ -117,6 +118,8 @@ def create_new_output_revision(
     comment="",
     extension="",
     path="",
+    size=None,
+    render_info=None,
     nb_elements=1,
     asset_instance_id=None,
     temporal_entity_id=None,
@@ -172,7 +175,9 @@ def create_new_output_revision(
                 comment=comment,
                 extension=extension,
                 path=path,
+                size=size,
                 representation=representation,
+                render_info=render_info,
                 revision=revision,
                 entity_id=entity_id,
                 asset_instance_id=asset_instance_id,
@@ -267,6 +272,8 @@ def get_output_files_for_entity(
     name=None,
     representation=None,
     file_status_id=None,
+    created_at_since=None,
+    person_id=None,
 ):
     """
     Return output files for given entity ordered by revision.
@@ -283,6 +290,11 @@ def get_output_files_for_entity(
         query = query.filter(OutputFile.representation == representation)
     if file_status_id:
         query = query.filter(OutputFile.file_status_id == file_status_id)
+    if created_at_since:
+        days = datetime.datetime.now() - datetime.timedelta(days=int(created_at_since))
+        query = query.filter(OutputFile.created_at >= days)
+    if person_id:
+        query = query.filter(OutputFile.person_id == person_id)
 
     query = query.filter(OutputFile.asset_instance_id == None)
     query = query.filter(OutputFile.temporal_entity_id == None)
@@ -292,7 +304,7 @@ def get_output_files_for_entity(
         .order_by(desc(OutputFile.revision))
         .all()
     )
-    return fields.serialize_models(output_files)
+    return fields.serialize_models(output_files, relations=True)
 
 
 def get_output_files_for_instance(
@@ -303,6 +315,8 @@ def get_output_files_for_instance(
     name=None,
     representation=None,
     file_status_id=None,
+    created_at_since=None,
+    person_id=None,
 ):
     """
     Return output files for given instance ordered by revision.
@@ -323,13 +337,18 @@ def get_output_files_for_instance(
         query = query.filter(OutputFile.representation == representation)
     if file_status_id:
         query = query.filter(OutputFile.file_status_id == file_status_id)
+    if created_at_since:
+        days = datetime.datetime.now() - datetime.timedelta(days=int(created_at_since))
+        query = query.filter(OutputFile.created_at >= days)
+    if person_id:
+        query = query.filter(OutputFile.person_id == person_id)
 
     output_files = (
         query.filter(OutputFile.revision >= 0)
         .order_by(desc(OutputFile.revision))
         .all()
     )
-    return fields.serialize_models(output_files)
+    return fields.serialize_models(output_files, relations=True)
 
 
 def get_last_output_files_for_entity(
@@ -339,6 +358,8 @@ def get_last_output_files_for_entity(
     name=None,
     representation=None,
     file_status_id=None,
+    created_at_since=None,
+    person_id=None,
 ):
     """
     Get last output files for given parameters.
@@ -408,13 +429,18 @@ def get_last_output_files_for_entity(
         query = query.filter(OutputFile.name == name)
     if representation:
         query = query.filter(OutputFile.representation == representation)
+    if created_at_since:
+        days = datetime.datetime.now() - datetime.timedelta(days=int(created_at_since))
+        query = query.filter(OutputFile.created_at >= days)
+    if person_id:
+        query = query.filter(OutputFile.person_id == person_id)
 
     query = query.filter(OutputFile.entity_id == entity_id)
     query = query.filter(OutputFile.asset_instance_id == None)
 
     # query
     output_files = query.all()
-    return fields.serialize_models(output_files)
+    return fields.serialize_models(output_files, relations=True)
 
 
 def get_last_output_files_for_instance(
@@ -425,6 +451,8 @@ def get_last_output_files_for_instance(
     name=None,
     representation=None,
     file_status_id=None,
+    created_at_since=None,
+    person_id=None,
 ):
     """
     Get last output files for given entity grouped by output type and name.
@@ -498,9 +526,14 @@ def get_last_output_files_for_instance(
         query = query.filter(OutputFile.representation == representation)
     if representation:
         query = query.filter(OutputFile.file_status_id == file_status_id)
+    if created_at_since:
+        days = datetime.datetime.now() - datetime.timedelta(days=int(created_at_since))
+        query = query.filter(OutputFile.created_at >= days)
+    if person_id:
+        query = query.filter(OutputFile.person_id == person_id)
 
     output_files = query.all()
-    return fields.serialize_models(output_files)
+    return fields.serialize_models(output_files, relations=True)
 
 
 def get_preview_file_raw(preview_file_id):

@@ -1,5 +1,7 @@
 import logging
 from pygelf import GelfTcpHandler, gelf
+import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration
 
 
 class GelfOVHHandler(GelfTcpHandler):
@@ -37,3 +39,14 @@ def configure_logs(app):
         )
         graylogHandler.setLevel(logging.ERROR)
         app.logger.addHandler(graylogHandler)
+
+    elif app.config["LOGS_MODE"] == "sentry":
+        sentry_logging = LoggingIntegration(
+            level=logging.INFO,
+            event_level=logging.ERROR
+        )
+        sentry_sdk.init(
+            dsn=app.config["LOGS_DSN"],
+            integrations=[sentry_logging]
+        )
+

@@ -63,9 +63,11 @@ class OutputFile(db.Model, BaseMixin, OutputFileSerializer):
         UUIDType(binary=False), db.ForeignKey("task_type.id"), index=True
     )
     person_id = db.Column(UUIDType(binary=False), db.ForeignKey("person.id"))
+    render_info = db.Column(db.String(200))
     source_file_id = db.Column(
         UUIDType(binary=False), db.ForeignKey("working_file.id")
     )
+    render_info = db.Column(db.String(200))
     source_file = relationship(
         "WorkingFile", 
         lazy="joined", 

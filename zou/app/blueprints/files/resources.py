@@ -365,6 +365,7 @@ class NewWorkingFileResource(Resource):
             software_id,
             revision,
             sep,
+            size
         ) = self.get_arguments()
 
         try:
@@ -410,6 +411,7 @@ class NewWorkingFileResource(Resource):
         parser.add_argument("software_id", default=maxsoft["id"])
         parser.add_argument("revision", default=0, type=int)
         parser.add_argument("sep", default="/")
+        parser.add_argument("size", default=None, type=int)
         args = parser.parse_args()
         return (
             args["name"],
@@ -421,6 +423,7 @@ class NewWorkingFileResource(Resource):
             args["software_id"],
             args["revision"],
             args["sep"],
+            args["size"],
         )
 
 
@@ -515,9 +518,11 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 output_type["id"],
                 person["id"],
                 args["task_type_id"],
+                size=args["size"],
                 revision=revision,
                 name=args["name"],
                 comment=args["comment"],
+                render_info=args["render_info"],
                 representation=args["representation"],
                 extension=args["extension"],
                 path=args["path"],
@@ -550,10 +555,12 @@ class NewEntityOutputFileResource(Resource, ArgsMixin):
                 ("revision", 0, False),
                 ("extension", "", False),
                 ("representation", "", False),
+                ("render_info", None, False),
                 ("nb_elements", 1, False),
                 ("path", "", False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
+                ("size", None, False),
             ]
         )
 
@@ -609,6 +616,7 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 revision=revision,
                 name=args["name"],
                 path=args["path"],
+                render_info=args["render_info"],
                 representation=args["representation"],
                 comment=args["comment"],
                 nb_elements=int(args["nb_elements"]),
@@ -644,6 +652,7 @@ class NewInstanceOutputFileResource(Resource, ArgsMixin):
                 ("representation", "", False),
                 ("is_sequence", False, False),
                 ("nb_elements", 1, False),
+                ("render_info", None, False),
                 ("sep", "/", False),
                 ("file_status_id", None, False),
             ]
@@ -730,7 +739,9 @@ class LastEntityOutputFilesResource(Resource):
             output_type_id=request.args.get("output_type_id", None),
             task_type_id=request.args.get("task_type_id", None),
             representation=request.args.get("representation", None),
-            file_status_id=request.args.get("file_status_id", None)
+            file_status_id=request.args.get("file_status_id", None),
+            created_at_since=request.args.get("created_at_since", None),
+            person_id=request.args.get("person_id", None),
         )
 
 
@@ -752,7 +763,9 @@ class LastInstanceOutputFilesResource(Resource):
             output_type_id=request.args.get("output_type_id", None),
             task_type_id=request.args.get("task_type_id", None),
             representation=request.args.get("representation", None),
-            file_status_id=request.args.get("file_status_id", None)
+            file_status_id=request.args.get("file_status_id", None),
+            created_at_since=request.args.get("created_at_since", None),
+            person_id=request.args.get("person_id", None),
         )
 
 
@@ -839,6 +852,8 @@ class EntityOutputFilesResource(Resource):
         name = request.args.get("name")
         representation = request.args.get("representation")
         file_status_id = request.args.get("file_status_id")
+        created_at_since = request.args.get("created_at_since")
+        person_id = request.args.get("person_id")
 
         return files_service.get_output_files_for_entity(
             entity["id"],
@@ -847,6 +862,8 @@ class EntityOutputFilesResource(Resource):
             name=name,
             representation=representation,
             file_status_id=file_status_id,
+            created_at_since=created_at_since,
+            person_id=person_id,
         )
 
 
@@ -867,6 +884,8 @@ class InstanceOutputFilesResource(Resource):
         name = request.args.get("name")
         representation = request.args.get("representation")
         file_status_id = request.args.get("file_status_id")
+        created_at_since = request.args.get("created_at_since")
+        person_id = request.args.get("person_id")
 
         return files_service.get_output_files_for_instance(
             asset_instance["id"],
@@ -876,6 +895,8 @@ class InstanceOutputFilesResource(Resource):
             name=name,
             representation=representation,
             file_status_id=file_status_id,
+            created_at_since=created_at_since,
+            person_id=person_id,
         )
 
 
@@ -972,6 +993,8 @@ class NewChildrenFilesResource(Resource, ArgsMixin):
                 file_id,
                 args["output_type_id"],
                 size=args["size"],
+                path=args["path"],
+                render_info=args["render_info"],
                 file_status_id=args["file_status_id"],
                 temporal_entity_id=args["temporal_entity_id"]
             )
@@ -985,6 +1008,8 @@ class NewChildrenFilesResource(Resource, ArgsMixin):
             [
                 ("output_type_id", "", True),
                 ("size", None, False),
+                ("path", None, False),
+                ("render_info", None, False),
                 ("file_status_id", None, False),
                 ("temporal_entity_id", None, False),
             ]
