@@ -3,16 +3,21 @@ import datetime
 import re
 import uuid
 
-from flask import current_app, request
+from flask import current_app
 
 from sqlalchemy.exc import StatementError, IntegrityError, DataError
 from sqlalchemy.orm import aliased
 
-from zou.app import app
+from zou.app import app, db
 from zou.app.utils import events
 
 from zou.app.models.attachment_file import AttachmentFile
-from zou.app.models.comment import Comment
+from zou.app.models.comment import (
+    Comment,
+    acknowledgements_table,
+    mentions_table,
+    preview_link_table
+)
 from zou.app.models.department import Department
 from zou.app.models.entity import Entity
 from zou.app.models.entity_type import EntityType
@@ -67,6 +72,7 @@ def clear_task_cache(task_id):
 @cache.memoize_function(120)
 def clear_comment_cache(comment_id):
     cache.cache.delete_memoized(get_comment, comment_id)
+    cache.cache.delete_memoized(get_comment_with_relations, comment_id)
 
 
 @cache.memoize_function(120)
@@ -246,14 +252,42 @@ def get_tasks_for_episode(episode_id, relations=False):
     return get_task_dicts_for_entity(episode.id, relations=relations)
 
 
+def get_shot_tasks_for_sequence(sequence_id, relations=False):
+    """
+    Get all shot tasks for given sequence.
+    """
+    query = _get_entity_task_query()
+    query = query.filter(Entity.parent_id == sequence_id)
+    return _convert_rows_to_detailed_tasks(query.all(), relations)
+
+
+def get_shot_tasks_for_episode(episode_id, relations=False):
+    """
+    Get all shot tasks for given episode.
+    """
+    query = _get_entity_task_query()
+    Sequence = aliased(Entity, name="sequence")
+    query = (
+        query
+        .join(Sequence, Entity.parent_id == Sequence.id)
+        .filter(Sequence.parent_id == episode_id)
+    )
+    return _convert_rows_to_detailed_tasks(query.all(), relations)
+
+
 def get_task_dicts_for_entity(entity_id, relations=False):
     """
     Return all tasks related to given entity. Add extra information like
     project name, task type name, etc.
     """
-    query = (
+    query = _get_entity_task_query()
+    query = query.filter(Task.entity_id == entity_id)
+    return _convert_rows_to_detailed_tasks(query.all(), relations)
+
+
+def _get_entity_task_query():
+    return (
         Task.query.order_by(Task.name)
-        .filter_by(entity_id=entity_id)
         .join(Project)
         .join(TaskType)
         .join(TaskStatus)
@@ -267,9 +301,10 @@ def get_task_dicts_for_entity(entity_id, relations=False):
         .order_by(Project.name, TaskType.name, EntityType.name, Entity.name)
     )
 
-    results = []
 
-    for entry in query.all():
+def _convert_rows_to_detailed_tasks(rows, relations=False):
+    results = []
+    for entry in rows:
         (
             task_object,
             project_name,
@@ -279,7 +314,7 @@ def get_task_dicts_for_entity(entity_id, relations=False):
             entity_name,
         ) = entry
 
-        task = task_object.serialize(relations=relations)
+        task = get_task_with_relations(str(task_object.id))
         task["project_name"] = project_name
         task["task_type_name"] = task_type_name
         task["task_status_name"] = task_status_name
@@ -390,8 +425,26 @@ def get_comments(task_id, is_client=False, is_manager=False):
     Return all comments related to given task.
     """
     comments = []
+    query = _prepare_query(task_id, is_client, is_manager)
+    (comments, comment_ids) = _run_task_comments_query(query)
+    if len(comments) > 0:
+        ack_map = _build_ack_map_for_comments(comment_ids)
+        mention_map = _build_mention_map_for_comments(comment_ids)
+        preview_map = _build_preview_map_for_comments(comment_ids)
+        attachment_file_map = _build_attachment_map_for_comments(comment_ids)
+        for comment in comments:
+            comment["acknowledgements"] = ack_map.get(comment["id"], [])
+            comment["previews"] = preview_map.get(comment["id"], [])
+            comment["mentions"] = mention_map.get(comment["id"], [])
+            comment["attachment_files"] = \
+                attachment_file_map.get(comment["id"], [])
+    return comments
+
+
+def _prepare_query(task_id, is_client, is_manager):
     query = (
-        Comment.query.order_by(Comment.created_at.desc())
+        Comment.query
+        .order_by(Comment.created_at.desc())
         .filter_by(object_id=task_id)
         .join(Person, TaskStatus)
         .add_columns(
@@ -403,13 +456,16 @@ def get_comments(task_id, is_client=False, is_manager=False):
             Person.has_avatar,
         )
     )
-
     if is_client:
         query = query.filter(Person.role == "client")
-
     if not is_client and not is_manager:
         query = query.filter(Person.role != "client")
+    return query
 
+
+def _run_task_comments_query(query):
+    comment_ids = []
+    comments = []
     for result in query.all():
         (
             comment,
@@ -434,44 +490,83 @@ def get_comments(task_id, is_client=False, is_manager=False):
             "color": task_status_color,
             "id": str(comment.task_status_id),
         }
-        comment_dict["acknowledgements"] = []
-        for person in comment.acknowledgements:
-            comment_dict["acknowledgements"].append(str(person.id))
-
-        if comment.preview_file_id is not None:
-            # Legacy stuff, should not be used anymore.
-            preview = files_service.get_preview_file(comment.preview_file_id)
-            comment_dict["previews"] = [
-                {
-                    "id": str(preview.id),
-                    "revision": preview["revision"],
-                    "extension": preview["extension"],
-                    "annotations": preview["annotations"],
-                }
-            ]
-        else:
-            comment_dict["previews"] = []
-            previews = sorted(comment.previews, key=lambda x: x.created_at)
-            for preview in previews:
-                comment_dict["previews"].append(
-                    {
-                        "id": str(preview.id),
-                        "revision": preview.revision,
-                        "extension": preview.extension,
-                        "annotations": preview.annotations,
-                    }
-                )
-        comment_dict["attachment_files"] = []
-        for attachment_file in comment.attachment_files:
-            comment_dict["attachment_files"].append({
-                "id": str(attachment_file.id),
-                "name": attachment_file.name,
-                "extension": attachment_file.extension,
-                "size": attachment_file.size
-            })
-
         comments.append(comment_dict)
-    return comments
+        comment_ids.append(comment_dict["id"])
+    return (comments, comment_ids)
+
+
+def _build_ack_map_for_comments(comment_ids):
+    ack_map = {}
+    for link in (
+        db.session
+        .query(acknowledgements_table)
+        .filter(acknowledgements_table.c.comment.in_(comment_ids))
+        .all()
+    ):
+        comment_id = str(link.comment)
+        person_id = str(link.person)
+        if comment_id not in ack_map:
+            ack_map[comment_id] = []
+        ack_map[comment_id].append(person_id)
+    return ack_map
+
+
+def _build_mention_map_for_comments(comment_ids):
+    mention_map = {}
+    for link in (
+        db.session
+        .query(mentions_table)
+        .filter(mentions_table.c.comment.in_(comment_ids))
+        .all()
+    ):
+        comment_id = str(link.comment)
+        person_id = str(link.person)
+        if comment_id not in mention_map:
+            mention_map[comment_id] = []
+        mention_map[comment_id].append(person_id)
+    return mention_map
+
+
+def _build_preview_map_for_comments(comment_ids):
+    preview_map = {}
+    query = (
+        PreviewFile.query
+        .join(preview_link_table)
+        .filter(preview_link_table.c.comment.in_(comment_ids))
+        .add_column(preview_link_table.c.comment)
+    )
+    for (preview, comment_id) in query.all():
+        comment_id = str(comment_id)
+        if comment_id not in preview_map:
+            preview_map[comment_id] = []
+        preview_map[comment_id].append({
+            "id": str(preview.id),
+            "revision": preview.revision,
+            "extension": preview.extension,
+            "annotations": preview.annotations,
+        })
+    return preview_map
+
+
+def _build_attachment_map_for_comments(comment_ids):
+    attachment_file_map = {}
+    attachment_files = (
+        AttachmentFile.query
+        .filter(AttachmentFile.comment_id.in_(comment_ids))
+        .all()
+    )
+    for attachment_file in attachment_files:
+        comment_id = str(attachment_file.comment_id)
+        attachment_file_id = str(attachment_file.id)
+        if comment_id not in attachment_file_map:
+            attachment_file_map[str(comment_id)] = []
+        attachment_file_map[str(comment_id)].append({
+            "id": attachment_file_id,
+            "name": attachment_file.name,
+            "extension": attachment_file.extension,
+            "size": attachment_file.size
+        })
+    return attachment_file_map
 
 
 def get_comment_raw(comment_id):
@@ -491,10 +586,19 @@ def get_comment_raw(comment_id):
 @cache.memoize_function(120)
 def get_comment(comment_id):
     """
-    Return comment matching give id as an active record.
+    Return comment matching give id as a dict.
     """
     comment = get_comment_raw(comment_id)
     return comment.serialize()
+
+
+@cache.memoize_function(120)
+def get_comment_with_relations(comment_id):
+    """
+    Return comment matching give id as a dict with joins information.
+    """
+    comment = get_comment_raw(comment_id)
+    return comment.serialize(relations=True)
 
 
 def get_comment_by_preview_file_id(preview_file_id):
@@ -513,12 +617,22 @@ def get_comment_by_preview_file_id(preview_file_id):
 
 def create_comment(
     object_id, task_status_id, person_id, text,
-    object_type="Task", files={}, checklist=[]
+    object_type="Task", files={}, checklist=[], created_at=""
 ):
     """
     Create a new comment for given object (by default, it considers this object
     as a Task).
     """
+    created_at_date = None
+    if created_at is not None and len(created_at) > 0:
+        try:
+            created_at_date = fields.get_date_object(
+                created_at,
+                date_format="%Y-%m-%d %H:%M:%S"
+            )
+        except ValueError:
+            pass
+
     comment = Comment.create(
         object_id=object_id,
         object_type=object_type,
@@ -527,7 +641,9 @@ def create_comment(
         mentions=get_comment_mentions(object_id, text),
         checklist=checklist,
         text=text,
+        created_at=created_at_date
     )
+
     comment = comment.serialize(relations=True)
     comment["attachment_files"] = []
     for uploaded_file in files.values():
@@ -662,7 +778,7 @@ def get_person_tasks(person_id, projects, is_done=None):
         if episode_id is None:
             episode_id = entity_source_id
 
-        task_dict = task.serialize(relations=True)
+        task_dict = get_task_with_relations(str(task.id))
         task_dict.update(
             {
                 "project_name": project_name,
@@ -1051,7 +1167,9 @@ def reset_mentions(comment):
     comment_to_update = Comment.get(comment["id"])
     comment_to_update.mentions = mentions
     comment_to_update.save()
-    return comment_to_update.serialize(relations=True)
+    comment_dict = comment_to_update.serialize()
+    comment_dict["mentions"] = [str(mention.id) for mention in mentions]
+    return comment_dict
 
 
 def get_comments_for_project(project_id, page=0):

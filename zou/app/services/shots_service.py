@@ -351,7 +351,7 @@ def get_shot_raw(shot_id):
     return shot
 
 
-@cache.memoize_function(30)
+@cache.memoize_function(120)
 def get_shot(shot_id):
     """
     Return given shot as a dictionary.
@@ -359,7 +359,7 @@ def get_shot(shot_id):
     return get_shot_raw(shot_id).serialize(obj_type="Shot")
 
 
-@cache.memoize_function(30)
+@cache.memoize_function(120)
 def get_shot_with_relations(shot_id):
     """
     Return given shot as a dictionary.
@@ -367,7 +367,7 @@ def get_shot_with_relations(shot_id):
     return get_shot_raw(shot_id).serialize(obj_type="Shot", relations=True)
 
 
-@cache.memoize_function(3)
+@cache.memoize_function(120)
 def get_full_shot(shot_id):
     """
     Return given shot as a dictionary with extra data like project and
@@ -817,25 +817,6 @@ def remove_sequence(sequence_id, force=False):
             "Some data are still linked to this sequence."
         )
     return sequence.serialize(obj_type="Sequence")
-
-
-def remove_episode(episode_id, force=False):
-    """
-    Remove an episode and all related sequences and shots.
-    """
-    episode = get_episode_raw(episode_id)
-    if force:
-        for sequence in Entity.get_all_by(parent_id=episode_id):
-            remove_sequence(sequence.id, force=True)
-        Playlist.delete_all_by(episode_id=episode_id)
-        ScheduleItem.delete_all_by(object_id=episode_id)
-    try:
-        episode.delete()
-    except IntegrityError:
-        raise ModelWithRelationsDeletionException(
-            "Some data are still linked to this episode."
-        )
-    return episode.serialize(obj_type="Episode")
 
 
 def create_episode(project_id, name):

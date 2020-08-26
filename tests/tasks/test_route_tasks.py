@@ -79,10 +79,7 @@ class TaskRoutesTestCase(ApiDBTestCase):
             "assignation"
         )
         self.assertEqual(len(notifications), 1)
-        self.assertEqual(
-            str(notifications[0]["person_id"]),
-            str(self.person.id)
-        )
+        self.assertEqual(str(notifications[0]["person_id"]), person_id)
 
     def test_task_assign_404(self):
         person_id = str(self.person.id)
@@ -444,3 +441,23 @@ class TaskRoutesTestCase(ApiDBTestCase):
         tasks_service.assign_task(task_1_id, user_id)
         tasks = self.get("/data/tasks/")
         self.assertEqual(len(tasks), 1)
+
+    def test_get_shot_tasks_for_sequence(self):
+        self.generate_fixture_task()
+        self.generate_fixture_shot_task()
+        self.generate_fixture_shot_task("second")
+        shot_id = str(self.shot.id)
+        tasks = self.get("/data/sequences/%s/shot-tasks" % self.sequence.id)
+        self.assertEqual(len(tasks), 2)
+        self.assertTrue(shot_id in [task["entity_id"] for task in tasks])
+
+    def test_get_shot_tasks_for_episode(self):
+        self.generate_fixture_task()
+        self.generate_fixture_episode()
+        self.sequence.update({"parent_id": self.episode.id})
+        self.generate_fixture_shot_task()
+        self.generate_fixture_shot_task("second")
+        shot_id = str(self.shot.id)
+        tasks = self.get("/data/episodes/%s/shot-tasks" % self.episode.id)
+        self.assertEqual(len(tasks), 2)
+        self.assertTrue(shot_id in [task["entity_id"] for task in tasks])

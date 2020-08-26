@@ -5,7 +5,7 @@ from flask import abort, request, send_file as flask_send_file
 from flask_restful import Resource, reqparse
 from flask_jwt_extended import jwt_required
 
-from zou.app.utils import events
+from zou.app.utils import events, permissions
 
 from zou.app.services import (
     comments_service,
@@ -35,6 +35,7 @@ class DownloadAttachmentResource(Resource):
                 mimetype=attachment_file["mimetype"],
                 as_attachment=False,
                 attachment_filename=attachment_file["name"],
+
             )
         except:
             abort(404)
@@ -64,12 +65,22 @@ class CommentTaskResource(Resource):
 
     @jwt_required
     def post(self, task_id):
-        (task_status_id, comment, person_id, checklist) = self.get_arguments()
+        (
+            task_status_id,
+            comment,
+            person_id,
+            created_at,
+            checklist
+        ) = self.get_arguments()
 
         task = tasks_service.get_task(task_id)
         user_service.check_project_access(task["project_id"])
         user_service.check_entity_access(task["entity_id"])
         task_status = tasks_service.get_task_status(task_status_id)
+
+        if not permissions.has_manager_permissions():
+            person_id = None
+            created_at = None
 
         if person_id:
             person = persons_service.get_person(person_id)
@@ -83,7 +94,8 @@ class CommentTaskResource(Resource):
             person_id=person["id"],
             task_status_id=task_status_id,
             text=comment,
-            checklist=checklist
+            checklist=checklist,
+            created_at=created_at
         )
 
         status_changed = task_status_id != task["task_status_id"]
@@ -137,6 +149,7 @@ class CommentTaskResource(Resource):
         )
         parser.add_argument("comment", default="")
         parser.add_argument("person_id", default="")
+        parser.add_argument("created_at", default="")
         if request.json is None:
             parser.add_argument("checklist", default="[]")
             args = parser.parse_args()
@@ -151,5 +164,6 @@ class CommentTaskResource(Resource):
             args["task_status_id"],
             args["comment"],
             args["person_id"],
+            args["created_at"],
             checklist
         )

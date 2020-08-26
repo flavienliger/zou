@@ -1,3 +1,4 @@
+import sqlalchemy.orm as orm
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.collections import InstrumentedList
 from zou.app.utils.fields import serialize_value
@@ -9,7 +10,10 @@ class SerializerMixin(object):
     """
 
     def is_join(self, attr):
-        return isinstance(getattr(self, attr), InstrumentedList)
+        return isinstance(
+            getattr(self.__class__, attr).impl,
+            orm.attributes.CollectionAttributeImpl
+        )
 
     def serialize(self, obj_type=None, relations=False, ignores=[]):
         attrs = inspect(self).attrs.keys()
@@ -44,7 +48,7 @@ class OutputFileSerializer(object):
 
     def is_join(self, attr):
         return isinstance(getattr(self, attr), InstrumentedList)
-        
+
     def serialize(self, obj_type=None, relations=False):
         attrs = inspect(self).attrs.keys()
         obj_dict = {}
@@ -67,7 +71,7 @@ class OutputFileSerializer(object):
             }
         obj_dict["type"] = obj_type or type(self).__name__
         return obj_dict
-        
+
     @staticmethod
     def serialize_list(models, obj_type=None, relations=False):
         return [
