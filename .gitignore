@@ -73,7 +73,8 @@ target/
 .python-version
 
 # celery beat schedule file
-celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
 
 # dotenv
 .env
