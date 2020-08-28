@@ -1,7 +1,7 @@
 """add workflow to project
 
 Revision ID: 5e2ce62632a6
-Revises: c68c2a62cfac
+Revises: 37c36148388f
 Create Date: 2020-07-14 01:35:24.759248
 
 """
@@ -13,7 +13,7 @@ import uuid
 
 # revision identifiers, used by Alembic.
 revision = '5e2ce62632a6'
-down_revision = 'c68c2a62cfac'
+down_revision = '37c36148388f'
 branch_labels = None
 depends_on = None
 
