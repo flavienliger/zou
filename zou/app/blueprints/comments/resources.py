@@ -5,6 +5,7 @@ from flask import abort, request, send_file as flask_send_file
 from flask_restful import Resource, reqparse
 from flask_jwt_extended import jwt_required
 
+from zou.app.models.task_status import TaskStatus
 from zou.app.utils import events, permissions
 
 from zou.app.services import (
@@ -13,7 +14,10 @@ from zou.app.services import (
     news_service,
     persons_service,
     tasks_service,
-    user_service
+    files_service,
+    user_service,
+    entities_service,
+    assets_service
 )
 
 
@@ -139,6 +143,91 @@ class CommentTaskResource(Resource):
         )
 
         comment["task_status"] = task_status
+        comment["person"] = person
+        return comment, 201
+
+    def get_arguments(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument(
+            "task_status_id", required=True, help="Task Status ID is missing"
+        )
+        parser.add_argument("comment", default="")
+        parser.add_argument("person_id", default="")
+        parser.add_argument("created_at", default="")
+        if request.json is None:
+            parser.add_argument("checklist", default="[]")
+            args = parser.parse_args()
+            checklist = args["checklist"]
+            checklist = json.loads(checklist)
+        else:
+            parser.add_argument("checklist", type=dict, action="append", default=[])
+            args = parser.parse_args()
+            checklist = args["checklist"]
+
+        return (
+            args["task_status_id"],
+            args["comment"],
+            args["person_id"],
+            args["created_at"],
+            checklist
+        )
+
+
+class CommentFileResource(Resource):
+    """
+    Creates a new comment for given task. It requires a text, a task_status
+    and a person as arguments. This way, comments keep history of status
+    changes. When the comment is created, it updates the task status with
+    given task status.
+    """
+
+    @jwt_required
+    def post(self, file_id):
+        (
+            task_status_id, # NOT USED CURRENTLY
+            comment,
+            person_id,
+            created_at,
+            checklist
+        ) = self.get_arguments()
+
+        output_file = files_service.get_output_file(file_id)
+        
+        # TODO: test and maybe check_asset_access
+        if output_file.get("entity_id"):
+            instance = entities_service.get_entity(output_file["entity_id"])
+        elif output_file.get("asset_instance_id"):
+            instance = assets_service.get_asset_instance(output_file["asset_instance_id"])
+        user_service.check_project_access(instance["project_id"])
+        
+        # TODO: improve this
+        task_status = TaskStatus.get_by(short_name="wip")
+        if not task_status:
+            print("no task status")
+            return None, 404
+        task_status_id = task_status.id
+
+        if not permissions.has_manager_permissions():
+            person_id = None
+            created_at = None
+
+        if person_id:
+            person = persons_service.get_person(person_id)
+        else:
+            person = persons_service.get_current_user()
+            
+        comment = tasks_service.create_comment(
+            object_id=file_id,
+            object_type="OutputFile",
+            files=request.files,
+            person_id=person["id"],
+            task_status_id=task_status_id,
+            text=comment,
+            checklist=checklist,
+            created_at=created_at
+        )
+
+        comment["task_status"] = task_status.serialize()
         comment["person"] = person
         return comment, 201
 

@@ -12,6 +12,9 @@ from zou.app.services import (
     persons_service,
     tasks_service,
     user_service,
+    files_service,
+    entities_service,
+    assets_service
 )
 from zou.app.utils import events, permissions
 
@@ -123,11 +126,28 @@ class CommentResource(BaseModelResource):
         Delete a comment corresponding at given ID.
         """
         comment = tasks_service.get_comment(instance_id)
-        task = tasks_service.get_task(comment["object_id"])
-        user_service.check_manager_project_access(task["project_id"])
-        self.pre_delete(comment)
+
+        # TODO: only the self user or a manager can delete a commentary
+        if comment["object_type"] == "Task":
+            task = tasks_service.get_task(comment["object_id"])
+            user_service.check_project_access(task["project_id"])
+            self.pre_delete(comment)
+            tasks_service.reset_task_data(comment["object_id"])
+            self.post_delete(comment)
+
+        elif comment["object_type"] == "OutputFile":
+            output_file = files_service.get_output_file(comment["object_id"])
+            if output_file.get("entity_id"):
+                instance = entities_service.get_entity(output_file["entity_id"])
+            elif output_file.get("asset_instance_id"):
+                instance = assets_service.get_asset_instance(output_file["asset_instance_id"])
+            
+            user_service.check_project_access(instance["project_id"])
+        
+        else:
+            current_app.logger.warn("Not yet implemented")
+            return "", 404
+
         deletion_service.remove_comment(comment["id"])
-        tasks_service.reset_task_data(comment["object_id"])
         tasks_service.clear_comment_cache(comment["id"])
-        self.post_delete(comment)
         return "", 204

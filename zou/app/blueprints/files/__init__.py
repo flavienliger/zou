@@ -5,6 +5,7 @@ from .resources import (
     WorkingFilePathResource,
     LastWorkingFilesResource,
     ModifiedFileResource,
+    FileCommentsResource,
     CommentWorkingFileResource,
     NewWorkingFileResource,
     TaskWorkingFilesResource,
@@ -31,6 +32,7 @@ from .resources import (
 )
 
 routes = [
+    ("/data/files/<file_id>/comments", FileCommentsResource),
     ("/data/files/<file_id>", FileResource),
     ("/data/tasks/<task_id>/working-files", TaskWorkingFilesResource),
     ("/data/tasks/<task_id>/working-files/new", NewWorkingFileResource),

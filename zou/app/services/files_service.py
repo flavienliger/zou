@@ -13,6 +13,7 @@ from zou.app.services.base_service import (
     get_or_create_instance_by_name,
 )
 
+from zou.app.services import comments_service
 from zou.app.services.exception import (
     OutputFileNotFoundException,
     OutputTypeNotFoundException,
@@ -702,3 +703,25 @@ def get_preview_files_for_project(project_id, page=-1):
         .order_by(desc(PreviewFile.updated_at))
     )
     return query_utils.get_paginated_results(query, page)
+
+
+def get_comments(file_id, is_client=False, is_manager=False):
+    """
+    Return all comments related to given task.
+    """
+    comments = []
+    query = comments_service._prepare_query(file_id, "OutputFile", is_client, is_manager)
+    (comments, comment_ids) = comments_service._run_task_comments_query(query)
+
+    if len(comments) > 0:
+        ack_map = comments_service._build_ack_map_for_comments(comment_ids)
+        mention_map = comments_service._build_mention_map_for_comments(comment_ids)
+        preview_map = comments_service._build_preview_map_for_comments(comment_ids)
+        attachment_file_map = comments_service._build_attachment_map_for_comments(comment_ids)
+        for comment in comments:
+            comment["acknowledgements"] = ack_map.get(comment["id"], [])
+            comment["previews"] = preview_map.get(comment["id"], [])
+            comment["mentions"] = mention_map.get(comment["id"], [])
+            comment["attachment_files"] = \
+                attachment_file_map.get(comment["id"], [])
+    return comments

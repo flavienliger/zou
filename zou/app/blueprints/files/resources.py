@@ -9,7 +9,7 @@ from flask_fs.errors import FileNotFound
 from zou.app import config
 
 from zou.app.mixin import ArgsMixin
-from zou.app.utils import fs
+from zou.app.utils import fs, permissions
 from zou.app.stores import file_store
 from zou.app.services import (
     file_tree_service,
@@ -20,6 +20,7 @@ from zou.app.services import (
     tasks_service,
     entities_service,
     user_service,
+    comments_service
 )
 
 from zou.app.services.exception import (
@@ -975,6 +976,25 @@ class EntityWorkingFilesResource(Resource):
 
 
 # --------------------------
+
+
+class FileCommentsResource(Resource):
+    """
+    Return comments link to given task.
+    """
+
+    @jwt_required
+    def get(self, file_id):
+        output_file = files_service.get_output_file(file_id)
+        if output_file.get("entity_id"):
+            instance = entities_service.get_entity(output_file["entity_id"])
+        elif output_file.get("asset_instance_id"):
+            instance = assets_service.get_asset_instance(output_file["asset_instance_id"])
+        user_service.check_project_access(instance["project_id"])
+
+        is_client = permissions.has_client_permissions()
+        is_manager = permissions.has_manager_permissions()
+        return files_service.get_comments(file_id, is_client, is_manager)
 
 
 class NewChildrenFilesResource(Resource, ArgsMixin):

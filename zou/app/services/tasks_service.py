@@ -51,6 +51,7 @@ from zou.app.services import (
     projects_service,
     shots_service,
     entities_service,
+    comments_service
 )
 
 
@@ -425,13 +426,13 @@ def get_comments(task_id, is_client=False, is_manager=False):
     Return all comments related to given task.
     """
     comments = []
-    query = _prepare_query(task_id, is_client, is_manager)
-    (comments, comment_ids) = _run_task_comments_query(query)
+    query = comments_service._prepare_query(task_id, "Task", is_client, is_manager)
+    (comments, comment_ids) = comments_service._run_task_comments_query(query)
     if len(comments) > 0:
-        ack_map = _build_ack_map_for_comments(comment_ids)
-        mention_map = _build_mention_map_for_comments(comment_ids)
-        preview_map = _build_preview_map_for_comments(comment_ids)
-        attachment_file_map = _build_attachment_map_for_comments(comment_ids)
+        ack_map = comments_service._build_ack_map_for_comments(comment_ids)
+        mention_map = comments_service._build_mention_map_for_comments(comment_ids)
+        preview_map = comments_service._build_preview_map_for_comments(comment_ids)
+        attachment_file_map = comments_service._build_attachment_map_for_comments(comment_ids)
         for comment in comments:
             comment["acknowledgements"] = ack_map.get(comment["id"], [])
             comment["previews"] = preview_map.get(comment["id"], [])
@@ -439,134 +440,6 @@ def get_comments(task_id, is_client=False, is_manager=False):
             comment["attachment_files"] = \
                 attachment_file_map.get(comment["id"], [])
     return comments
-
-
-def _prepare_query(task_id, is_client, is_manager):
-    query = (
-        Comment.query
-        .order_by(Comment.created_at.desc())
-        .filter_by(object_id=task_id)
-        .join(Person, TaskStatus)
-        .add_columns(
-            TaskStatus.name,
-            TaskStatus.short_name,
-            TaskStatus.color,
-            Person.first_name,
-            Person.last_name,
-            Person.has_avatar,
-        )
-    )
-    if is_client:
-        query = query.filter(Person.role == "client")
-    if not is_client and not is_manager:
-        query = query.filter(Person.role != "client")
-    return query
-
-
-def _run_task_comments_query(query):
-    comment_ids = []
-    comments = []
-    for result in query.all():
-        (
-            comment,
-            task_status_name,
-            task_status_short_name,
-            task_status_color,
-            person_first_name,
-            person_last_name,
-            person_has_avatar,
-        ) = result
-
-        comment_dict = comment.serialize()
-        comment_dict["person"] = {
-            "first_name": person_first_name,
-            "last_name": person_last_name,
-            "has_avatar": person_has_avatar,
-            "id": str(comment.person_id),
-        }
-        comment_dict["task_status"] = {
-            "name": task_status_name,
-            "short_name": task_status_short_name,
-            "color": task_status_color,
-            "id": str(comment.task_status_id),
-        }
-        comments.append(comment_dict)
-        comment_ids.append(comment_dict["id"])
-    return (comments, comment_ids)
-
-
-def _build_ack_map_for_comments(comment_ids):
-    ack_map = {}
-    for link in (
-        db.session
-        .query(acknowledgements_table)
-        .filter(acknowledgements_table.c.comment.in_(comment_ids))
-        .all()
-    ):
-        comment_id = str(link.comment)
-        person_id = str(link.person)
-        if comment_id not in ack_map:
-            ack_map[comment_id] = []
-        ack_map[comment_id].append(person_id)
-    return ack_map
-
-
-def _build_mention_map_for_comments(comment_ids):
-    mention_map = {}
-    for link in (
-        db.session
-        .query(mentions_table)
-        .filter(mentions_table.c.comment.in_(comment_ids))
-        .all()
-    ):
-        comment_id = str(link.comment)
-        person_id = str(link.person)
-        if comment_id not in mention_map:
-            mention_map[comment_id] = []
-        mention_map[comment_id].append(person_id)
-    return mention_map
-
-
-def _build_preview_map_for_comments(comment_ids):
-    preview_map = {}
-    query = (
-        PreviewFile.query
-        .join(preview_link_table)
-        .filter(preview_link_table.c.comment.in_(comment_ids))
-        .add_column(preview_link_table.c.comment)
-    )
-    for (preview, comment_id) in query.all():
-        comment_id = str(comment_id)
-        if comment_id not in preview_map:
-            preview_map[comment_id] = []
-        preview_map[comment_id].append({
-            "id": str(preview.id),
-            "revision": preview.revision,
-            "extension": preview.extension,
-            "annotations": preview.annotations,
-        })
-    return preview_map
-
-
-def _build_attachment_map_for_comments(comment_ids):
-    attachment_file_map = {}
-    attachment_files = (
-        AttachmentFile.query
-        .filter(AttachmentFile.comment_id.in_(comment_ids))
-        .all()
-    )
-    for attachment_file in attachment_files:
-        comment_id = str(attachment_file.comment_id)
-        attachment_file_id = str(attachment_file.id)
-        if comment_id not in attachment_file_map:
-            attachment_file_map[str(comment_id)] = []
-        attachment_file_map[str(comment_id)].append({
-            "id": attachment_file_id,
-            "name": attachment_file.name,
-            "extension": attachment_file.extension,
-            "size": attachment_file.size
-        })
-    return attachment_file_map
 
 
 def get_comment_raw(comment_id):
@@ -633,12 +506,16 @@ def create_comment(
         except ValueError:
             pass
 
+    mentions = []
+    if object_type == "Task":
+        mentions = get_comment_mentions(object_id, text)
+
     comment = Comment.create(
         object_id=object_id,
         object_type=object_type,
         task_status_id=task_status_id,
         person_id=person_id,
-        mentions=get_comment_mentions(object_id, text),
+        mentions=mentions,
         checklist=checklist,
         text=text,
         created_at=created_at_date

@@ -6,6 +6,7 @@ from .resources import (
     AckCommentResource,
     CommentTaskResource,
     DownloadAttachmentResource,
+    CommentFileResource
 )
 
 
@@ -16,6 +17,7 @@ routes = [
         DownloadAttachmentResource
     ),
     ("/actions/tasks/<task_id>/comment", CommentTaskResource),
+    ("/actions/files/<file_id>/comment", CommentFileResource),
 ]
 
 blueprint = Blueprint("comments", "comments")
