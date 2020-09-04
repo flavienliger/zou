@@ -33,7 +33,7 @@ class OutputFile(db.Model, BaseMixin, OutputFileSerializer):
     """
     __tablename__ = "output_file"
 
-    shotgun_id = db.Column(db.Integer())
+    shotgun_id = db.Column(db.String(50))
 
     name = db.Column(db.String(250), nullable=False)
     canceled = db.Column(db.Boolean(), default=False, nullable=False) # surement une forme d'"omit"
