@@ -63,6 +63,22 @@ def get_output_file(output_file_id):
     """
     return get_output_file_raw(output_file_id).serialize(relations=True)
 
+def get_output_file_by_shotgun_id(shotgun_id):
+    """
+    Return output file by is shotgun_id
+    """
+    if not shotgun_id:
+        raise OutputFileNotFoundException()
+
+    try:
+        output_file = OutputFile.query.filter_by(shotgun_id=shotgun_id).first()
+    except StatementError:
+        raise OutputFileNotFoundException()
+
+    if not output_file:
+        raise OutputFileNotFoundException()
+
+    return output_file.serialize()
 
 def get_software_raw(software_id):
     """
