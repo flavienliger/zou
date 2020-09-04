@@ -109,6 +109,7 @@ def _prepare_query(object_id, object_type, is_client, is_manager):
                 Person.first_name,
                 Person.last_name,
                 Person.has_avatar,
+                Person.desktop_login,
             )
         )
     else:
@@ -121,6 +122,7 @@ def _prepare_query(object_id, object_type, is_client, is_manager):
                 Person.first_name,
                 Person.last_name,
                 Person.has_avatar,
+                Person.desktop_login,
             )
         )
     if is_client:
@@ -145,6 +147,7 @@ def _run_task_comments_query(query):
                 person_first_name,
                 person_last_name,
                 person_has_avatar,
+                person_desktop_login,
             ) = result
         else:
             task = False
@@ -153,6 +156,7 @@ def _run_task_comments_query(query):
                 person_first_name,
                 person_last_name,
                 person_has_avatar,
+                person_desktop_login,
             ) = result
 
         comment_dict = comment.serialize()
@@ -160,6 +164,7 @@ def _run_task_comments_query(query):
             "first_name": person_first_name,
             "last_name": person_last_name,
             "has_avatar": person_has_avatar,
+            "desktop_login": person_desktop_login,
             "id": str(comment.person_id),
         }
         if task:
