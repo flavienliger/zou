@@ -29,6 +29,7 @@ from .resources import (
     WorkingFileFileResource,
     NewChildrenFilesResource,
     NewDependentFilesResource,
+    FileShotgunResource
 )
 
 routes = [
@@ -112,6 +113,7 @@ routes = [
     
     ("/data/files/<file_id>/children-files/new", NewChildrenFilesResource),
     ("/data/files/<file_id>/dependent-files/new", NewDependentFilesResource),
+    ("/data/files/shotgun/<shotgun_id>", FileShotgunResource)
 ]
 
 blueprint = Blueprint("files", "files")

@@ -923,6 +923,22 @@ class FileResource(Resource):
         return file_dict
 
 
+class FileShotgunResource(Resource):
+    """
+    Get information about a file that could be a working file as much as an
+    output file.
+    """
+
+    @jwt_required
+    def get(self, shotgun_id):
+        print("get??", shotgun_id)
+        file_dict = files_service.get_output_file_by_shotgun_id(shotgun_id)
+        entity = entities_service.get_entity(file_dict["entity_id"])
+        project_id = entity["project_id"]
+
+        user_service.check_project_access(project_id)
+        return file_dict
+
 class SetTreeResource(Resource):
     """
     Define a template file to use for given project. Template files are located
