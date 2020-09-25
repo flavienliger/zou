@@ -246,7 +246,7 @@ def add_picture(picture_type, output_id, file_path):
 
 def add_movie(movie_type, output_id, file_path):
     with app.app_context():
-        file_store.add_picture(movie_type, output_id, file_path)
+        file_store.add_movie(movie_type, output_id, file_path)
 
 
 # -------------------------

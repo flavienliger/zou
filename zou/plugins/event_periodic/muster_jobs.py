@@ -58,7 +58,7 @@ def check_completed(file_path):
 def render_completed(element):
     # OutputFile
     if element.__class__.__name__ == "OutputFile":
-        element.file_status_id = FileStatus.get_by(name="WAITING").id
+        element.file_status_id = FileStatus.get_by(name="PENDING REVIEW").id
         element.save()
         output_file_new.handle_event.delay({"output_file_id": element.id})
     # ChildrenFile
@@ -70,9 +70,10 @@ def render_completed(element):
 
 def render_progress(element, progression):
     data = {"render_progress": progression}
+    
     if element.data:
         # ignore same progress
-        if element.get("render_progress") == progression:
+        if element.data.get("render_progress") == progression:
             return
 
         data.update(element.data)
