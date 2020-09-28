@@ -1,4 +1,4 @@
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy_utils import UUIDType
 
 from zou.app import db
@@ -76,7 +76,7 @@ class OutputFile(db.Model, BaseMixin, OutputFileSerializer):
     children_files = relationship(
         "ChildrenFile", 
         lazy="joined", 
-        backref="parent_file"
+        backref=backref("parent_file", cascade="all, delete")
     )
     # TODO: by default not serialize it
     dependent_files = relationship(
