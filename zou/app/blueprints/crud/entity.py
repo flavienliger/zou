@@ -26,7 +26,7 @@ class EntityEventMixin(object):
             type_name = "episode"
         return type_name
 
-    def emit_event(self, event_name, entity_dict):
+    def emit_event(self, event_name, entity_dict, data={}):
         instance_id = entity_dict["id"]
         type_name = self.get_type_name(entity_dict)
         if event_name in ["update", "delete"]:
@@ -34,12 +34,15 @@ class EntityEventMixin(object):
                 shots_service.clear_shot_cache(instance_id)
             if type_name == "asset":
                 assets_service.clear_asset_cache(instance_id)
+        content = {
+            "%s_id" % type_name: instance_id,
+            "project_id": entity_dict["project_id"],
+            type_name: entity_dict,
+        }
+        content.update(data)
         events.emit(
             "%s:%s" % (type_name, event_name),
-            {
-                "%s_id" % type_name: instance_id,
-                "project_id": entity_dict["project_id"],
-            },
+            content,
         )
 
 
@@ -49,9 +52,6 @@ class EntitiesResource(BaseModelsResource, EntityEventMixin):
 
     def check_create_permissions(self, entity):
         user_service.check_manager_project_access(entity["project_id"])
-
-    def emit_create_event(self, entity_dict):
-        self.emit_event("new", entity_dict)
 
 
 class EntityResource(BaseModelResource, EntityEventMixin):
@@ -103,13 +103,15 @@ class EntityResource(BaseModelResource, EntityEventMixin):
             data = self.update_data(data, instance_id)
             if data.get("source_id", None) == "null":
                 data["source_id"] = None
+                
+            changes_dict = self.make_changes_dict(previous_version, data)
             entity.update(data)
 
             entity_dict = entity.serialize()
 
             if shots_service.is_shot(entity_dict):
                 self.save_version_if_needed(entity_dict, previous_version)
-            self.emit_update_event(entity_dict)
+            self.emit_update_event(entity_dict, data={"changes": changes_dict})
             return entity_dict, 200
 
         except StatementError as exception:
@@ -145,9 +147,3 @@ class EntityResource(BaseModelResource, EntityEventMixin):
                 entity_id=shot["id"], name=pname, data=previous_data
             )
         return version
-
-    def emit_update_event(self, entity_dict):
-        self.emit_event("update", entity_dict)
-
-    def emit_delete_event(self, entity_dict):
-        self.emit_event("delete", entity_dict)

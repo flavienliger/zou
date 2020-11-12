@@ -12,7 +12,39 @@ from zou.app.utils import permissions, events
 from zou.app.services.exception import ArgumentsException
 
 
-class BaseModelsResource(Resource):
+
+class EntityEventMixin(object):
+    def make_changes_dict(self, old, new):
+        res = {}
+        def rcv(d1, d2, out):
+            for key, item in d1.items():
+                if type(item) == dict:
+                    out[key] = {}
+                    return rcv(item, d2[key], out[key])
+                    
+                if item != d2.get(key):
+                    out[key] = {
+                        "old": d2.get(key),
+                        "new": item
+                    }
+        rcv(new, old, res)
+        return res
+        
+    def emit_event(self, event_name, entity_dict, data={}):
+        instance_id = entity_dict["id"]
+        type_name = self.model.__tablename__
+        content = {
+            "%s_id" % type_name: instance_id,
+            type_name: entity_dict,
+        }
+        content.update(data)
+        events.emit(
+            "%s:%s" % (type_name, event_name),
+            content,
+        )
+
+
+class BaseModelsResource(Resource, EntityEventMixin):
     def __init__(self, model):
         Resource.__init__(self)
         self.model = model
@@ -198,14 +230,11 @@ class BaseModelsResource(Resource):
             current_app.logger.error(str(exception), exc_info=1)
             return {"message": str(exception)}, 400
 
-    def emit_create_event(self, instance_dict):
-        return events.emit(
-            "%s:new" % self.model.__tablename__.replace("_", "-"),
-            {"%s_id" % self.model.__tablename__: instance_dict["id"]},
-        )
+    def emit_create_event(self, entity_dict, data={}):
+        self.emit_event("new", entity_dict, data)
 
 
-class BaseModelResource(Resource):
+class BaseModelResource(Resource, EntityEventMixin):
     def __init__(self, model):
         Resource.__init__(self)
         self.protected_fields = ["id", "created_at", "updated_at"]
@@ -293,9 +322,10 @@ class BaseModelResource(Resource):
             self.check_update_permissions(instance_dict, data)
             self.pre_update(instance_dict, data)
             data = self.update_data(data, instance_id)
+            changes_dict = self.make_changes_dict(instance_dict, data)
             instance.update(data)
             instance_dict = instance.serialize()
-            self.emit_update_event(instance_dict)
+            self.emit_update_event(instance_dict, data={"changes": changes_dict})
             self.post_update(instance_dict)
             return instance_dict, 200
 
@@ -341,14 +371,10 @@ class BaseModelResource(Resource):
 
         return "", 204
 
-    def emit_update_event(self, instance_dict):
-        return events.emit(
-            "%s:update" % self.model.__tablename__.replace("_", "-"),
-            {"%s_id" % self.model.__tablename__: instance_dict["id"]},
-        )
 
-    def emit_delete_event(self, instance_dict):
-        return events.emit(
-            "%s:delete" % self.model.__tablename__.replace("_", "-"),
-            {"%s_id" % self.model.__tablename__: instance_dict["id"]},
-        )
+    def emit_update_event(self, entity_dict, data={}):
+        self.emit_event("update", entity_dict, data)
+
+    def emit_delete_event(self, entity_dict, data={}):
+        self.emit_event("delete", entity_dict, data)
+        
