@@ -137,7 +137,7 @@ def _run_task_comments_query(query):
     comments = []
     for result in query.all():
         # Task
-        if result.__len__() == 7:
+        if result.__len__() == 8:
             task = True
             (
                 comment,
