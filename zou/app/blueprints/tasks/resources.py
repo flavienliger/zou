@@ -16,7 +16,6 @@ from zou.app.services import (
     entities_service,
     files_service,
     file_tree_service,
-    news_service,
     notifications_service,
     persons_service,
     projects_service,
@@ -119,11 +118,15 @@ class TaskCommentResource(Resource):
         task = tasks_service.get_task(comment["object_id"])
         self.new_task_status_id = task["task_status_id"]
         if self.previous_task_status_id != self.new_task_status_id:
-            events.emit("task:status-changed", {
-                "task_id": task["id"],
-                "new_task_status_id": self.new_task_status_id,
-                "previous_task_status_id": self.previous_task_status_id
-            })
+            events.emit(
+                "task:status-changed",
+                {
+                    "task_id": task["id"],
+                    "new_task_status_id": self.new_task_status_id,
+                    "previous_task_status_id": self.previous_task_status_id
+                },
+                project_id=task["project_id"]
+            )
         return comment
 
     @jwt_required
@@ -136,7 +139,7 @@ class TaskCommentResource(Resource):
         if permissions.has_manager_permissions():
             user_service.check_project_access(task["project_id"])
         else:
-            user_service.check_working_on_entity(task["entity_id"])
+            user_service.check_person_access(comment["person_id"])
         self.pre_delete(comment)
         deletion_service.remove_comment(comment_id)
         tasks_service.reset_task_data(comment["object_id"])
@@ -189,15 +192,24 @@ class CreateShotTasksResource(Resource):
     """
 
     @jwt_required
-    def post(self, task_type_id):
-        criterions = query.get_query_criterions_from_request(request)
-        if "project_id" not in criterions:
-            return {"error": True, "message": "Project ID is missing"}, 400
-
-        user_service.check_manager_project_access(criterions["project_id"])
-        shots = shots_service.get_shots(criterions)
+    def post(self, project_id, task_type_id):
+        user_service.check_manager_project_access(project_id)
         task_type = tasks_service.get_task_type(task_type_id)
-        tasks = [tasks_service.create_task(task_type, shot) for shot in shots]
+
+        shot_ids = request.json
+        shots = []
+        if type(shot_ids) == list and len(shot_ids) > 0:
+            for shot_id in shot_ids:
+                shot = shots_service.get_shot(shot_id)
+                if shot["project_id"] == project_id:
+                    shots.append(shot)
+        else:
+            criterions = query.get_query_criterions_from_request(request)
+            criterions["project_id"] = project_id
+            shots = shots_service.get_shots(criterions)
+
+        task_type = tasks_service.get_task_type(task_type_id)
+        tasks = tasks_service.create_tasks(task_type, shots)
         return tasks, 201
 
 
@@ -207,17 +219,23 @@ class CreateAssetTasksResource(Resource):
     """
 
     @jwt_required
-    def post(self, task_type_id):
-        criterions = query.get_query_criterions_from_request(request)
-        if "project_id" not in criterions:
-            return {"error": True, "message": "Project ID is missing"}, 400
-
-        user_service.check_manager_project_access(criterions["project_id"])
-        assets = assets_service.get_assets(criterions)
+    def post(self, project_id, task_type_id):
+        user_service.check_manager_project_access(project_id)
         task_type = tasks_service.get_task_type(task_type_id)
-        tasks = [
-            tasks_service.create_task(task_type, asset) for asset in assets
-        ]
+
+        asset_ids = request.json
+        assets = []
+        if type(asset_ids) == list and len(asset_ids) > 0:
+            for asset_id in asset_ids:
+                asset = assets_service.get_asset(asset_id)
+                if asset["project_id"] == project_id:
+                    assets.append(asset)
+        else:
+            criterions = query.get_query_criterions_from_request(request)
+            criterions["project_id"] = project_id
+            assets = assets_service.get_assets(criterions)
+
+        tasks = tasks_service.create_tasks(task_type, assets)
         return tasks, 201
 
 
@@ -543,6 +561,22 @@ class DeleteAllTasksForTaskTypeResource(Resource):
         return "", 204
 
 
+class DeleteTasksResource(Resource):
+    """
+    Delete tasks matching id list given in parameter. See it as a way to batch
+    delete tasks.
+    """
+
+    @jwt_required
+    def post(self, project_id):
+        user_service.check_manager_project_access(project_id)
+        task_ids = request.json
+        task_ids = deletion_service.remove_tasks(project_id, task_ids)
+        for task_id in task_ids:
+            tasks_service.clear_task_cache(task_id)
+        return task_ids, 200
+
+
 class ProjectSubscriptionsResource(Resource):
     """
     Retrieve all subcriptions to tasks related to given project.
@@ -550,8 +584,8 @@ class ProjectSubscriptionsResource(Resource):
     """
 
     @jwt_required
+    @permissions.require_admin
     def get(self, project_id):
-        permissions.check_admin_permissions()
         projects_service.get_project(project_id)
         return notifications_service.get_subscriptions_for_project(project_id)
 
@@ -563,8 +597,8 @@ class ProjectNotificationsResource(Resource, ArgsMixin):
     """
 
     @jwt_required
+    @permissions.require_admin
     def get(self, project_id):
-        permissions.check_admin_permissions()
         projects_service.get_project(project_id)
         page = self.get_page()
         return notifications_service.get_notifications_for_project(
@@ -579,8 +613,8 @@ class ProjectTasksResource(Resource, ArgsMixin):
     """
 
     @jwt_required
+    @permissions.require_admin
     def get(self, project_id):
-        permissions.check_admin_permissions()
         projects_service.get_project(project_id)
         page = self.get_page()
         return tasks_service.get_tasks_for_project(project_id, page)
@@ -593,8 +627,8 @@ class ProjectCommentsResource(Resource, ArgsMixin):
     """
 
     @jwt_required
+    @permissions.require_admin
     def get(self, project_id):
-        permissions.check_admin_permissions()
         projects_service.get_project(project_id)
         page = self.get_page()
         return tasks_service.get_comments_for_project(project_id, page)
@@ -607,8 +641,8 @@ class ProjectPreviewFilesResource(Resource, ArgsMixin):
     """
 
     @jwt_required
+    @permissions.require_admin
     def get(self, project_id):
-        permissions.check_admin_permissions()
         projects_service.get_project(project_id)
         page = self.get_page()
         return files_service.get_preview_files_for_project(project_id, page)

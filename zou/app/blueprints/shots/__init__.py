@@ -23,8 +23,10 @@ from .resources import (
     ProjectSequencesResource,
     ProjectEpisodesResource,
     ProjectEpisodeStatsResource,
+    ProjectEpisodeRetakeStatsResource,
     EpisodeResource,
     EpisodesResource,
+    EpisodeShotsResource,
     EpisodeAndTasksResource,
     EpisodeSequencesResource,
     EpisodeTasksResource,
@@ -60,6 +62,7 @@ routes = [
     ("/data/episodes", EpisodesResource),
     ("/data/episodes/with-tasks", EpisodeAndTasksResource),
     ("/data/episodes/<episode_id>", EpisodeResource),
+    ("/data/episodes/<episode_id>/shots", EpisodeShotsResource),
     ("/data/episodes/<episode_id>/sequences", EpisodeSequencesResource),
     ("/data/episodes/<episode_id>/tasks", EpisodeTasksResource),
     ("/data/episodes/<episode_id>/task-types", EpisodeTaskTypesResource),
@@ -77,6 +80,10 @@ routes = [
     ("/data/projects/<project_id>/sequences", ProjectSequencesResource),
     ("/data/projects/<project_id>/episodes", ProjectEpisodesResource),
     ("/data/projects/<project_id>/episodes/stats", ProjectEpisodeStatsResource),
+    (
+        "/data/projects/<project_id>/episodes/retake-stats",
+        ProjectEpisodeRetakeStatsResource
+    ),
 ]
 
 

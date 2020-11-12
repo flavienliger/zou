@@ -32,16 +32,28 @@ def get_casting(shot_id):
         .join(Entity, EntityLink.entity_out_id == Entity.id)
         .join(EntityType, Entity.entity_type_id == EntityType.id)
         .filter(Entity.canceled != True)
-        .add_columns(Entity.name, EntityType.name, Entity.preview_file_id)
+        .add_columns(
+            Entity.name,
+            EntityType.name,
+            Entity.preview_file_id,
+            Entity.source_id,
+        )
         .order_by(EntityType.name, Entity.name)
     )
 
-    for (link, entity_name, entity_type_name, entity_preview_file_id) in links:
+    for (
+        link,
+        entity_name,
+        entity_type_name,
+        entity_preview_file_id,
+        episode_id
+    ) in links:
         casting.append(
             {
                 "asset_id": fields.serialize_value(link.entity_out_id),
                 "asset_name": entity_name,
                 "asset_type_name": entity_type_name,
+                "episode_id": fields.serialize_value(episode_id),
                 "preview_file_id": fields.serialize_value(
                     entity_preview_file_id
                 ),
@@ -146,11 +158,13 @@ def update_casting(entity_id, casting):
     entity_id = str(entity.id)
     if shots_service.is_shot(entity.serialize()):
         events.emit(
-            "shot:casting-update", {"shot_id": entity_id}
+            "shot:casting-update", {"shot_id": entity_id},
+            project_id=str(entity.project_id)
         )
     else:
         events.emit(
-            "asset:casting-update", {"asset_id": entity_id}
+            "asset:casting-update", {"asset_id": entity_id},
+            project_id=str(entity.project_id)
         )
     return casting
 
@@ -160,6 +174,8 @@ def create_casting_link(entity_in_id, asset_id, nb_occurences=1, label=""):
     Add a link between given entity and given asset.
     """
     link = EntityLink.get_by(entity_in_id=entity_in_id, entity_out_id=asset_id)
+    entity = entities_service.get_entity(entity_in_id)
+    project_id = str(entity["project_id"])
     if link is None:
         link = EntityLink.create(
             entity_in_id=entity_in_id,
@@ -167,8 +183,18 @@ def create_casting_link(entity_in_id, asset_id, nb_occurences=1, label=""):
             nb_occurences=nb_occurences,
             label=label,
         )
+        events.emit("entity-link:new", {
+            "entity_link_id": link.id,
+            "entity_in_id": link.entity_in_id,
+            "entity_out_id": link.entity_out_id,
+            "nb_occurences": nb_occurences
+        }, project_id=project_id)
     else:
         link.update({"nb_occurences": nb_occurences, "label": label})
+        events.emit("entity-link:update", {
+            "entity_link_id": link.id,
+            "nb_occurences": nb_occurences
+        }, project_id=project_id)
     return link
 
 
@@ -368,7 +394,7 @@ def add_asset_instance_to_scene(scene_id, asset_id, description=""):
             "scene_id": scene_id,
             "asset_id": asset_id,
             "asset_instance_id": asset_instance["id"],
-        },
+        }
     )
     return asset_instance
 
@@ -485,3 +511,16 @@ def get_entity_casting(entity_id):
     """
     entity = entities_service.get_entity_raw(entity_id)
     return Entity.serialize_list(entity.entities_out, obj_type="Asset")
+
+
+def get_entity_link(entity_in_id, entity_out_id):
+    """
+    Get link matching given entities.
+    """
+    link = EntityLink.get_by(
+        entity_in_id=entity_in_id, entity_out_id=entity_out_id
+    )
+    if link:
+        return link.serialize()
+    else:
+        return None

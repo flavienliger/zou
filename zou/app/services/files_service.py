@@ -8,6 +8,9 @@ from zou.app.models.project import Project
 from zou.app.models.software import Software
 from zou.app.models.task import Task
 
+from zou.app.services import (
+    entities_service
+)
 from zou.app.services.base_service import (
     get_instance,
     get_or_create_instance_by_name,
@@ -206,7 +209,12 @@ def create_new_output_revision(
                 nb_elements=nb_elements,
                 temporal_entity_id=temporal_entity_id,
             )
-            events.emit("output_file:new", {"output_file_id": output_file.id})
+            entity = entities_service.get_entity(entity_id)
+            events.emit(
+                "output-file:new",
+                {"output_file_id": output_file.id},
+                project_id=entity["project_id"]
+            )
         else:
             raise EntryAlreadyExistsException
 
@@ -588,7 +596,8 @@ def get_preview_files_for_task(task_id):
 
 
 def create_preview_file_raw(
-    name, revision, task_id, person_id, source="webgui", extension="mp4"
+    name, revision, task_id, person_id, source="webgui", extension="mp4",
+    position=1
 ):
     return PreviewFile.create(
         name=name,
@@ -597,14 +606,16 @@ def create_preview_file_raw(
         task_id=task_id,
         person_id=person_id,
         extension=extension,
+        position=position,
     )
 
 
 def create_preview_file(
-    name, revision, task_id, person_id, source="webgui", extension="mp4"
+    name, revision, task_id, person_id, source="webgui", extension="mp4",
+    position=1
 ):
     return create_preview_file_raw(
-        name, revision, task_id, person_id, source, extension
+        name, revision, task_id, person_id, source, extension, position
     ).serialize()
 
 
@@ -620,7 +631,12 @@ def update_preview_file(preview_file_id, data):
     preview_file = get_preview_file_raw(preview_file_id)
     preview_file.update(data)
     clear_preview_file_cache(preview_file_id)
-    events.emit("preview-file:update", {"preview_file_id": preview_file_id})
+    task = Task.get(preview_file.task_id)
+    events.emit(
+        "preview-file:update",
+        {"preview_file_id": preview_file_id},
+        project_id=str(task.project_id)
+    )
     return preview_file.serialize()
 
 
@@ -695,7 +711,12 @@ def get_output_files_for_output_type_and_asset_instance(
 def remove_preview_file(preview_file_id):
     preview_file = get_preview_file_raw(preview_file_id)
     preview_file.delete()
-    events.emit("preview_file:delete", {"preview_file_id": preview_file_id})
+    task = Task.get(preview_file.task_id)
+    events.emit(
+        "preview-file:delete",
+        {"preview_file_id": preview_file_id},
+        project_id=str(task.project_id)
+    )
     return preview_file.serialize()
 
 

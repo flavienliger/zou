@@ -8,8 +8,10 @@ from flask_jwt_extended import jwt_required
 
 from sqlalchemy.exc import IntegrityError, StatementError
 
-from zou.app.utils import permissions, events
-from zou.app.services.exception import ArgumentsException
+from zou.app.utils import events, fields, permissions
+from zou.app.services.exception import (
+    ArgumentsException, WrongParameterException
+)
 
 
 
@@ -41,6 +43,7 @@ class EntityEventMixin(object):
         events.emit(
             "%s:%s" % (type_name, event_name),
             content,
+            project_id=entity_dict.get("project_id", None)
         )
 
 
@@ -241,6 +244,8 @@ class BaseModelResource(Resource, EntityEventMixin):
         self.model = model
 
     def get_model_or_404(self, instance_id):
+        if not fields.is_valid_id(instance_id):
+            raise WrongParameterException("Malformed ID.")
         instance = self.model.get(instance_id)
         if instance is None:
             abort(404)

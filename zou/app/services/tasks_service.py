@@ -1,9 +1,6 @@
 import collections
 import datetime
-import re
 import uuid
-
-from flask import current_app
 
 from sqlalchemy.exc import StatementError, IntegrityError, DataError
 from sqlalchemy.orm import aliased
@@ -30,8 +27,7 @@ from zou.app.models.task_type import TaskType
 from zou.app.models.task_status import TaskStatus
 from zou.app.models.time_spent import TimeSpent
 
-from zou.app.utils import cache, fields, fs, query as query_utils
-from zou.app.stores import file_store
+from zou.app.utils import cache, fields, query as query_utils
 
 from zou.app.services.exception import (
     CommentNotFoundException,
@@ -408,6 +404,38 @@ def get_next_preview_revision(task_id):
     return revision
 
 
+def get_next_position(task_id, revision):
+    """
+    Get upcoming position for preview files of given task and revision.
+    """
+    preview_files = (
+        PreviewFile.query.filter_by(task_id=task_id, revision=revision)
+        .all()
+    )
+    return len(preview_files) + 1
+
+
+def update_preview_file_position(preview_file_id, position):
+    """
+    Change positions for preview files of given task and revision.
+    Given position is the new position for given preview file. :q
+    """
+    preview_file = files_service.get_preview_file_raw(preview_file_id)
+    task_id = preview_file.task_id
+    revision = preview_file.revision
+    preview_files = (
+        PreviewFile.query.filter_by(task_id=task_id, revision=revision)
+        .order_by(PreviewFile.position, PreviewFile.created_at)
+        .all()
+    )
+    if position > 0 and position <= len(preview_files):
+        tmp_list = [p for p in preview_files if str(p.id) != preview_file_id]
+        tmp_list.insert(position - 1, preview_file)
+        for (i, preview) in enumerate(tmp_list):
+            preview.update({"position": i + 1})
+    return PreviewFile.serialize_list(preview_files)
+
+
 def get_time_spents(task_id):
     """
     Return time spents for given task.
@@ -486,71 +514,6 @@ def get_comment_by_preview_file_id(preview_file_id):
         return comment.serialize()
     else:
         return None
-
-
-def create_comment(
-    object_id, task_status_id, person_id, text,
-    object_type="Task", files={}, checklist=[], created_at=""
-):
-    """
-    Create a new comment for given object (by default, it considers this object
-    as a Task).
-    """
-    created_at_date = None
-    if created_at is not None and len(created_at) > 0:
-        try:
-            created_at_date = fields.get_date_object(
-                created_at,
-                date_format="%Y-%m-%d %H:%M:%S"
-            )
-        except ValueError:
-            pass
-
-    mentions = []
-    if object_type == "Task":
-        mentions = get_comment_mentions(object_id, text)
-
-    comment = Comment.create(
-        object_id=object_id,
-        object_type=object_type,
-        task_status_id=task_status_id,
-        person_id=person_id,
-        mentions=mentions,
-        checklist=checklist,
-        text=text,
-        created_at=created_at_date
-    )
-
-    comment = comment.serialize(relations=True)
-    comment["attachment_files"] = []
-    for uploaded_file in files.values():
-        attachment_file = create_attachment(comment, uploaded_file)
-        comment["attachment_files"].append(attachment_file)
-
-    events.emit("comment:new", {"comment_id": comment["id"]})
-    return comment
-
-
-def get_comment_mentions(object_id, text):
-    """
-    Check for people mention (@full name) in text and returns matching person
-    active records.
-    """
-    task = get_task_raw(object_id)
-    project = Project.get(task.project_id)
-    mentions = []
-    for person in project.team:
-        if re.search("@%s( |$)" % person.full_name(), text) is not None:
-            mentions.append(person)
-    return mentions
-
-
-def delete_comment(comment_id):
-    comment = get_comment_raw(comment_id)
-    comment.delete()
-    clear_comment_cache(comment_id)
-    events.emit("comment:delete", {"comment_id": comment_id})
-    return comment.serialize()
 
 
 def get_tasks_for_entity_and_task_type(entity_id, task_type_id):
@@ -711,6 +674,53 @@ def get_person_tasks(person_id, projects, is_done=None):
     return tasks
 
 
+def create_tasks(task_type, entities):
+    """
+    Create a new task for given task type and for each entity.
+    """
+    task_status = get_todo_status()
+    current_user_id = None
+    try:
+        current_user_id = persons_service.get_current_user()["id"]
+    except RuntimeError:
+        pass
+
+    tasks = []
+    for entity in entities:
+        existing_task = Task.query \
+            .filter_by(
+                entity_id=entity["id"],
+                task_type_id=task_type["id"]
+            ) \
+            .scalar()
+        if existing_task is None:
+            task = Task.create_no_commit(
+                name="main",
+                duration=0,
+                estimation=0,
+                completion_rate=0,
+                start_date=None,
+                end_date=None,
+                due_date=None,
+                real_start_date=None,
+                project_id=entity["project_id"],
+                task_type_id=task_type["id"],
+                task_status_id=task_status["id"],
+                entity_id=entity["id"],
+                assigner_id=current_user_id,
+                assignees=[],
+            )
+            tasks.append(task)
+    Task.commit()
+
+    task_dicts = []
+    for task in tasks:
+        task_dict = _finalize_task_creation(task_type, task_status, task)
+        task_dicts.append(task_dict)
+
+    return task_dicts
+
+
 def create_task(task_type, entity, name="main"):
     """
     Create a new task for given task type and entity.
@@ -737,24 +747,34 @@ def create_task(task_type, entity, name="main"):
             assigner_id=current_user_id,
             assignees=[],
         )
-        task_dict = task.serialize(relations=True)
-        task_dict.update(
-            {
-                "task_status_id": task_status["id"],
-                "task_status_name": task_status["name"],
-                "task_status_short_name": task_status["short_name"],
-                "task_status_color": task_status["color"],
-                "task_type_id": task_type["id"],
-                "task_type_name": task_type["name"],
-                "task_type_color": task_type["color"],
-                "task_type_priority": task_type["priority"],
-            }
-        )
-        events.emit("task:new", {"task_id": task.id})
+        task_dict = _finalize_task_creation(task_type, task_status, task)
         return task_dict
-
     except IntegrityError:
         pass  # Tasks already exists, no need to create it.
+    return None
+
+
+def _finalize_task_creation(task_type, task_status, task):
+    task_dict = task.serialize()
+    task_dict["assignees"] = []
+    task_dict.update(
+        {
+            "task_status_id": task_status["id"],
+            "task_status_name": task_status["name"],
+            "task_status_short_name": task_status["short_name"],
+            "task_status_color": task_status["color"],
+            "task_type_id": task_type["id"],
+            "task_type_name": task_type["name"],
+            "task_type_color": task_type["color"],
+            "task_type_priority": task_type["priority"],
+        }
+    )
+    events.emit(
+        "task:new",
+        {"task_id": task.id},
+        project_id=task_dict["project_id"]
+    )
+    return task_dict
 
 
 def update_task(task_id, data):
@@ -768,7 +788,11 @@ def update_task(task_id, data):
 
     task.update(data)
     clear_task_cache(task_id)
-    events.emit("task:update", {"task_id": task_id})
+    events.emit(
+        "task:update",
+        {"task_id": task_id},
+        project_id=str(task.project_id)
+    )
     return task.serialize()
 
 
@@ -792,7 +816,7 @@ def get_or_create_status(
             is_done=is_done,
             is_retake=is_retake,
         )
-        events.emit("task_status:new", {"task_status_id": task_status.id})
+        events.emit("task-status:new", {"task_status_id": task_status.id})
     return task_status.serialize()
 
 
@@ -845,7 +869,7 @@ def get_or_create_task_type(
             for_shots=for_shots,
             shotgun_id=shotgun_id,
         )
-        events.emit("task_type:new", {"task_type_id": task_type.id})
+        events.emit("task-type:new", {"task_type_id": task_type.id})
     return task_type.serialize()
 
 
@@ -861,6 +885,8 @@ def create_or_update_time_spent(task_id, person_id, date, duration, add=False):
     except DataError:
         raise WrongDateFormatException
 
+    task = Task.get(task_id)
+    project_id = str(task.project_id)
     if time_spent is not None:
         if duration == 0:
             time_spent.delete()
@@ -868,21 +894,32 @@ def create_or_update_time_spent(task_id, person_id, date, duration, add=False):
             time_spent.update({"duration": time_spent.duration + duration})
         else:
             time_spent.update({"duration": duration})
-        events.emit("time-spent:update", {"time_spent_id": str(time_spent.id)})
+        events.emit(
+            "time-spent:update",
+            {"time_spent_id": str(time_spent.id)},
+            project_id=project_id
+        )
     else:
         time_spent = TimeSpent.create(
             task_id=task_id, person_id=person_id, date=date, duration=duration
         )
-        events.emit("time-spent:new", {"time_spent_id": str(time_spent.id)})
+        events.emit(
+            "time-spent:new",
+            {"time_spent_id": str(time_spent.id)},
+            project_id=project_id
+        )
 
-    task = Task.get(task_id)
     task.duration = 0
     time_spents = TimeSpent.get_all_by(task_id=task_id)
     for time_spent in time_spents:
         task.duration += time_spent.duration
     task.save()
     clear_task_cache(task_id)
-    events.emit("task:update", {"task_id": task_id})
+    events.emit(
+        "task:update",
+        {"task_id": task_id},
+        project_id=project_id
+    )
 
     return time_spent.serialize()
 
@@ -904,15 +941,18 @@ def clear_assignation(task_id):
     Clear task assignation and emit a *task:unassign* event.
     """
     task = get_task_raw(task_id)
+    project_id = str(task.project_id)
     assignees = [person.serialize() for person in task.assignees]
     task.update({"assignees": []})
     clear_task_cache(task_id)
     task_dict = task.serialize()
     for assignee in assignees:
         events.emit(
-            "task:unassign", {"person_id": assignee["id"], "task_id": task_id}
+            "task:unassign",
+            {"person_id": assignee["id"], "task_id": task_id},
+            project_id=project_id
         )
-    events.emit("task:update", {"task_id": task_id})
+    events.emit("task:update", {"task_id": task_id}, project_id=project_id)
     return task_dict
 
 
@@ -921,18 +961,24 @@ def assign_task(task_id, person_id):
     Assign given person to given task. Emit a *task:assign* event.
     """
     task = get_task_raw(task_id)
+    project_id = str(task.project_id)
     person = persons_service.get_person_raw(person_id)
     task.assignees.append(person)
     task.save()
     task_dict = task.serialize()
-    events.emit("task:assign", {"task_id": task.id, "person_id": person.id})
+    events.emit(
+        "task:assign",
+        {"task_id": task.id, "person_id": person.id},
+        project_id=project_id
+    )
     clear_task_cache(task_id)
-    events.emit("task:update", {"task_id": task_id})
+    events.emit("task:update", {"task_id": task_id}, project_id=project_id)
     return task_dict
 
 
 def start_task(task_id):
     """
+    Deprecated
     Change the task status to wip if it is not already the case. It emits a
     *task:start* event. Change the real start date time to now.
     """
@@ -958,7 +1004,7 @@ def start_task(task_id):
                 "previous_task_status_id": task_dict_before["task_status_id"],
                 "real_start_date": task.real_start_date,
                 "shotgun_id": task_dict_before["shotgun_id"],
-            },
+            }
         )
 
     return task.serialize()
@@ -968,6 +1014,7 @@ def task_to_review(
     task_id, person, comment, preview_path={}, change_status=True
 ):
     """
+    Deprecated
     Change the task status to "waiting for approval" if it is not already the
     case. It emits a *task:to-review* event.
     """
@@ -1018,35 +1065,37 @@ def add_preview_file_to_comment(comment_id, person_id, task_id, revision=0):
     """
     comment = get_comment_raw(comment_id)
     news = News.get_by(comment_id=comment_id)
+    task = Task.get(comment.object_id)
+    project_id = str(task.project_id)
+    position = 1
     if revision == 0 and len(comment.previews) == 0:
         revision = get_next_preview_revision(task_id)
     elif revision == 0:
         revision = comment.previews[0].revision
-
+        position = get_next_position(task_id, revision)
+    else:
+        position = get_next_position(task_id, revision)
     preview_file = files_service.create_preview_file_raw(
-        str(uuid.uuid4())[:13], revision, task_id, person_id
+        str(uuid.uuid4())[:13], revision, task_id, person_id, position=position
     )
-    events.emit("preview-file:create", {
-        "preview_file_id": preview_file.id,
-        "comment_id": comment_id,
-    })
+    events.emit(
+        "preview-file:new",
+        {
+            "preview_file_id": preview_file.id,
+            "comment_id": comment_id,
+        },
+        project_id=project_id
+    )
     comment.previews.append(preview_file)
     comment.save()
     if news is not None:
         news.update({"preview_file_id": preview_file.id})
-    events.emit("comment:update", {"comment_id": comment.id})
+    events.emit(
+        "comment:update",
+        {"comment_id": comment.id},
+        project_id=project_id
+    )
     return preview_file.serialize()
-
-
-def reset_mentions(comment):
-    task = get_task(comment["object_id"])
-    mentions = get_comment_mentions(task["id"], comment["text"])
-    comment_to_update = Comment.get(comment["id"])
-    comment_to_update.mentions = mentions
-    comment_to_update.save()
-    comment_dict = comment_to_update.serialize()
-    comment_dict["mentions"] = [str(mention.id) for mention in mentions]
-    return comment_dict
 
 
 def get_comments_for_project(project_id, page=0):
@@ -1180,27 +1229,6 @@ def reset_task_data(task_id):
             "task_status_id": task_status_id,
         }
     )
-    events.emit("task:update", {"task_id": task.id})
+    project_id = str(task.project_id)
+    events.emit("task:update", {"task_id": task.id}, project_id)
     return task.serialize()
-
-
-def create_attachment(comment, uploaded_file):
-    tmp_folder = current_app.config["TMP_DIR"]
-    filename = uploaded_file.filename
-    mimetype = uploaded_file.mimetype
-    extension = fs.get_file_extension(filename)
-
-    attachment_file = AttachmentFile.create(
-        name=filename,
-        size=0,
-        extension=extension,
-        mimetype=mimetype,
-        comment_id=comment["id"]
-    )
-    attachment_file_id = str(attachment_file.id)
-
-    tmp_file_path = fs.save_file(tmp_folder, attachment_file_id, uploaded_file)
-    size = fs.get_file_size(tmp_file_path)
-    attachment_file.update({"size": size})
-    file_store.add_file("attachments", attachment_file_id, tmp_file_path)
-    return attachment_file.present()

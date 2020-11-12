@@ -2,11 +2,12 @@ import os
 
 from flask import abort, request, current_app
 from flask import send_file as flask_send_file
-from flask_restful import Resource
+from flask_restful import Resource, reqparse
 from flask_jwt_extended import jwt_required
 from flask_fs.errors import FileNotFound
 
 from zou.app import config
+from zou.app.mixin import ArgsMixin
 from zou.app.stores import file_store
 from zou.app.services import (
     deletion_service,
@@ -30,14 +31,18 @@ from zou.app.utils import (
 
 ALLOWED_PICTURE_EXTENSION = [".png", ".jpg", ".jpeg", ".PNG", ".JPG", ".JPEG"]
 ALLOWED_MOVIE_EXTENSION = [
+    ".avi",
     ".mp4",
+    ".m4v",
+    ".mkv",
     ".mov",
     ".wmv",
-    ".m4v",
+    ".AVI",
     ".MP4",
     ".MOV",
     ".WMV",
     ".M4V",
+    ".MKV",
 ]
 ALLOWED_FILE_EXTENSION = [
     ".obj",
@@ -297,14 +302,20 @@ class CreatePreviewFilePictureResource(Resource):
         """
         preview_file = files_service.get_preview_file(preview_file_id)
         comment = tasks_service.get_comment_by_preview_file_id(preview_file_id)
+        task = tasks_service.get_task(preview_file["task_id"])
         comment_id = None
         events.emit(
-            "preview-file:update", {"preview_file_id": preview_file["id"]}
+            "preview-file:update", {"preview_file_id": preview_file["id"]},
+            project_id=task["project_id"]
         )
 
         if comment is not None:
             comment_id = comment["id"]
-            events.emit("comment:update", {"comment_id": comment_id})
+            events.emit(
+                "comment:update",
+                {"comment_id": comment_id},
+                project_id=task["project_id"]
+            )
             events.emit(
                 "preview-file:add-file",
                 {
@@ -314,6 +325,7 @@ class CreatePreviewFilePictureResource(Resource):
                     "revision": preview_file["revision"],
                     "extension": preview_file["extension"],
                 },
+                project_id=task["project_id"]
             )
 
     def is_allowed(self, preview_file_id):
@@ -735,4 +747,22 @@ class SetMainPreviewResource(Resource):
         user_service.check_entity_access(task["entity_id"])
         return entities_service.update_entity_preview(
             task["entity_id"], preview_file_id
+        )
+
+
+class UpdatePreviewPositionResource(Resource, ArgsMixin):
+    """
+    Allow to change orders of previews for a single revision.
+    """
+
+    @jwt_required
+    def put(self, preview_file_id):
+        parser = reqparse.RequestParser()
+        parser.add_argument("position", default=0, type=int)
+        args = parser.parse_args()
+        preview_file = files_service.get_preview_file(preview_file_id)
+        task = tasks_service.get_task(preview_file["task_id"])
+        user_service.check_manager_project_access(task["project_id"])
+        return tasks_service.update_preview_file_position(
+            preview_file_id, args["position"]
         )

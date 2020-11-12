@@ -1,6 +1,5 @@
 import re
 
-from sqlalchemy import func
 from sqlalchemy.orm import aliased
 from sqlalchemy.exc import IntegrityError, StatementError
 
@@ -12,7 +11,6 @@ from zou.app.utils import (
 )
 
 from zou.app.models.entity import Entity, EntityLink, EntityVersion
-from zou.app.models.playlist import Playlist
 from zou.app.models.project import Project
 from zou.app.models.schedule_item import ScheduleItem
 from zou.app.models.subscription import Subscription
@@ -279,52 +277,48 @@ def get_shots_and_tasks(criterions={}):
 
         if shot_id not in shot_map:
 
-            shot_map[shot_id] = {
+            shot_map[shot_id] = fields.serialize_dict({
                 "canceled": shot.canceled,
-                "data": fields.serialize_value(shot.data),
+                "data": shot.data,
                 "description": shot.description,
-                "entity_type_id": str(shot.entity_type_id),
-                "episode_id": str(episode_id),
+                "entity_type_id": shot.entity_type_id,
+                "episode_id": episode_id,
                 "episode_name": episode_name or "",
                 "fps": shot.data.get("fps", None),
                 "frame_in": shot.data.get("frame_in", None),
                 "frame_out": shot.data.get("frame_out", None),
-                "id": str(shot.id),
+                "id": shot.id,
                 "name": shot.name,
                 "nb_frames": shot.nb_frames,
-                "parent_id": str(shot.parent_id),
-                "preview_file_id": str(shot.preview_file_id or ""),
-                "project_id": str(project_id),
+                "parent_id": shot.parent_id,
+                "preview_file_id": shot.preview_file_id or None,
+                "project_id": project_id,
                 "project_name": project_name,
-                "sequence_id": str(sequence_id),
+                "sequence_id": sequence_id,
                 "sequence_name": sequence_name,
-                "source_id": str(shot.source_id),
+                "source_id": shot.source_id,
                 "tasks": [],
                 "type": "Shot",
-            }
+            })
 
         if task_id is not None:
             if task_id not in task_map:
-                task_dict = {
-                    "id": str(task_id),
+                task_dict = fields.serialize_dict({
+                    "id": task_id,
                     "entity_id": shot_id,
-                    "task_status_id": str(task_status_id),
-                    "task_type_id": str(task_type_id),
+                    "task_status_id": task_status_id,
+                    "task_type_id": task_type_id,
                     "priority": task_priority or 0,
                     "estimation": task_estimation,
                     "duration": task_duration,
                     "retake_count": task_retake_count,
-                    "real_start_date": fields.serialize_value(
-                        task_real_start_date
-                    ),
-                    "end_date": fields.serialize_value(task_end_date),
-                    "start_date": fields.serialize_value(task_start_date),
-                    "due_date": fields.serialize_value(task_due_date),
-                    "last_comment_date": fields.serialize_value(
-                        task_last_comment_date
-                    ),
+                    "real_start_date": task_real_start_date,
+                    "end_date": task_end_date,
+                    "start_date": task_start_date,
+                    "due_date": task_due_date,
+                    "last_comment_date": task_last_comment_date,
                     "assignees": [],
-                }
+                })
                 task_map[task_id] = task_dict
                 shot_dict = shot_map[shot_id]
                 shot_dict["tasks"].append(task_dict)
@@ -668,6 +662,7 @@ def get_episodes_for_project(project_id, only_assigned=False):
     if only_assigned:
         Sequence = aliased(Entity, name="sequence")
         Shot = aliased(Entity, name="shot")
+        Asset = aliased(Entity, name="asset")
         query = (
             Entity.query
             .join(Sequence, Entity.id == Sequence.parent_id)
@@ -676,7 +671,21 @@ def get_episodes_for_project(project_id, only_assigned=False):
             .filter(Entity.project_id == project_id)
             .filter(user_service.build_assignee_filter())
         )
-        return fields.serialize_models(query.all())
+        shot_episodes = fields.serialize_models(query.all())
+        shot_episode_ids = {episode["id"]: True for episode in shot_episodes}
+        query = (
+            Entity.query
+            .join(Asset, Entity.id == Asset.source_id)
+            .join(Task, Asset.id == Task.entity_id)
+            .filter(Entity.project_id == project_id)
+            .filter(user_service.build_assignee_filter())
+        )
+        asset_episodes = fields.serialize_models(query.all())
+        result = shot_episodes
+        for episode in asset_episodes:
+            if episode["id"] not in shot_episode_ids:
+                result.append(episode)
+        return result
     else:
         return entities_service.get_entities_for_project(
             project_id, get_episode_type()["id"], "Episode"
@@ -730,6 +739,21 @@ def get_shots_for_project(project_id, only_assigned=False):
     )
 
 
+def get_shots_for_episode(episode_id, relations=False):
+    """
+    Get all shots for given episode.
+    """
+    Sequence = aliased(Entity, name="sequence")
+    shot_type_id = get_shot_type()["id"]
+    result = (
+        Entity.query
+        .filter(Entity.entity_type_id == shot_type_id)
+        .filter(Sequence.parent_id == episode_id)
+        .join(Sequence, Entity.parent_id == Sequence.id)
+    ).all()
+    return Entity.serialize_list(result, "Shot", relations=relations)
+
+
 def get_scenes_for_project(project_id, only_assigned=False):
     """
     Retrieve all scenes related to given project.
@@ -765,7 +789,11 @@ def remove_shot(shot_id, force=False):
     if is_tasks_related and not force:
         shot.update({"canceled": True})
         clear_shot_cache(shot_id)
-        events.emit("shot:update", {"shot_id": shot_id})
+        events.emit(
+            "shot:update",
+            {"shot_id": shot_id},
+            project_id=str(shot.project_id)
+        )
     else:
         from zou.app.services import tasks_service
 
@@ -779,7 +807,11 @@ def remove_shot(shot_id, force=False):
         EntityLink.delete_all_by(entity_in_id=shot_id)
         shot.delete()
         clear_shot_cache(shot_id)
-        events.emit("shot:delete", {"shot_id": shot_id})
+        events.emit(
+            "shot:delete",
+            {"shot_id": shot_id},
+            project_id=str(shot.project_id)
+        )
 
     deleted_shot = shot.serialize(obj_type="Shot")
     return deleted_shot
@@ -796,7 +828,11 @@ def remove_scene(scene_id):
     except IntegrityError:
         scene.update({"canceled": True})
     deleted_scene = scene.serialize(obj_type="Scene")
-    events.emit("scene:delete", {"scene_id": scene_id})
+    events.emit(
+        "scene:delete",
+        {"scene_id": scene_id},
+        project_id=str(scene.project_id)
+    )
     return deleted_scene
 
 
@@ -832,7 +868,7 @@ def create_episode(project_id, name):
             entity_type_id=episode_type["id"], project_id=project_id, name=name
         )
     events.emit(
-        "episode:new", {"episode_id": episode.id, "project_id": project_id}
+        "episode:new", {"episode_id": episode.id}, project_id=project_id
     )
     return episode.serialize(obj_type="Episode")
 
@@ -860,7 +896,7 @@ def create_sequence(project_id, episode_id, name):
             name=name,
         )
     events.emit(
-        "sequence:new", {"sequence_id": sequence.id, "project_id": project_id}
+        "sequence:new", {"sequence_id": sequence.id}, project_id=project_id
     )
     return sequence.serialize(obj_type="Sequence")
 
@@ -872,7 +908,8 @@ def create_shot(project_id, sequence_id, name, data={}, nb_frames=0):
     shot_type = get_shot_type()
 
     if sequence_id is not None:
-        get_sequence(sequence_id)  # raises SequenceNotFound if it fails.
+        # raises SequenceNotFound if it fails.
+        sequence = get_sequence(sequence_id)
 
     shot = Entity.get_by(
         entity_type_id=shot_type["id"],
@@ -889,7 +926,10 @@ def create_shot(project_id, sequence_id, name, data={}, nb_frames=0):
             data=data,
             nb_frames=nb_frames,
         )
-    events.emit("shot:new", {"shot_id": shot.id, "project_id": project_id})
+    events.emit("shot:new", {
+        "shot_id": shot.id,
+        "episode_id": sequence["parent_id"],
+    }, project_id=project_id)
     return shot.serialize(obj_type="Shot")
 
 
@@ -919,7 +959,7 @@ def create_scene(project_id, sequence_id, name):
             name=name,
             data={},
         )
-    events.emit("scene:new", {"scene_id": scene.id, "project_id": project_id})
+    events.emit("scene:new", {"scene_id": scene.id}, project_id=project_id)
     return scene.serialize(obj_type="Scene")
 
 
@@ -930,144 +970,12 @@ def update_shot(shot_id, data_dict):
     shot = get_shot_raw(shot_id)
     shot.update(data_dict)
     clear_shot_cache(shot_id)
-    events.emit("shot:update", {"shot_id": shot_id})
+    events.emit(
+        "shot:update",
+        {"shot_id": shot_id},
+        project_id=str(shot.project_id)
+    )
     return shot.serialize()
-
-
-def get_episode_stats_for_project(project_id, only_assigned=False):
-    """
-    Retrieve number of tasks by status, task_types and episodes
-    for given project.
-    """
-    Sequence = aliased(Entity, name="sequence")
-    Episode = aliased(Entity, name="episode")
-    query = (
-        Task.query.with_entities(
-            Task.project_id,
-            Episode.id,
-            Task.task_type_id,
-            Task.task_status_id,
-            TaskStatus.short_name,
-            TaskStatus.color,
-        )
-        .filter(Task.project_id == project_id)
-        .join(Project, Project.id == Task.project_id)
-        .join(TaskStatus, TaskStatus.id == Task.task_status_id)
-        .join(Entity, Entity.id == Task.entity_id)
-        .join(Sequence, Sequence.id == Entity.parent_id)
-        .join(Episode, Episode.id == Sequence.parent_id)
-        .group_by(
-            Task.project_id,
-            Episode.id,
-            Task.task_type_id,
-            Task.task_status_id,
-            TaskStatus.short_name,
-            TaskStatus.color,
-        )
-        .add_columns(func.count(Task.id))
-        .add_columns(func.sum(Entity.nb_frames))
-    )
-
-    if only_assigned:
-        query = query.filter(user_service.build_assignee_filter())
-
-    results = {}
-    for data in query.all():
-        add_entry_to_stats(results, *data)
-        add_entry_to_all_stats(results, *data)
-    return results
-
-
-def add_entry_to_stats(
-    results,
-    project_id,
-    episode_id,
-    task_type_id,
-    task_status_id,
-    task_status_short_name,
-    task_status_color,
-    task_count,
-    entity_nb_frames,
-):
-    """
-    Add to stats results, information of given count for given entity, task
-    type and task satus.
-    """
-    episode_id = str(episode_id)
-    task_type_id = str(task_type_id)
-    task_status_id = str(task_status_id)
-    results.setdefault(episode_id, {})
-    results[episode_id].setdefault(task_type_id, {})
-    results[episode_id][task_type_id].setdefault(task_status_id, {})
-    results[episode_id][task_type_id][task_status_id] = {
-        "name": task_status_short_name,
-        "color": task_status_color,
-        "count": task_count,
-        "frames": entity_nb_frames or 0,
-    }
-
-    # Aggregate for episode
-    results[episode_id].setdefault("all", {})
-    results[episode_id]["all"].setdefault(
-        task_status_id,
-        {
-            "name": task_status_short_name,
-            "color": task_status_color,
-            "count": 0,
-            "frames": 0,
-        },
-    )
-    results[episode_id]["all"][task_status_id]["count"] += task_count or 0
-    results[episode_id]["all"][task_status_id]["frames"] += (
-        entity_nb_frames or 0
-    )
-
-
-def add_entry_to_all_stats(
-    results,
-    project_id,
-    episode_id,
-    task_type_id,
-    task_status_id,
-    task_status_short_name,
-    task_status_color,
-    task_count,
-    entity_nb_frames,
-):
-    """
-    Add to aggregated entry of stats results, information of given count for
-    given entity, task type and task satus.
-    """
-    task_type_id = str(task_type_id)
-    task_status_id = str(task_status_id)
-    results.setdefault("all", {"all": {}})
-
-    results["all"].setdefault(task_type_id, {})
-    results["all"][task_type_id].setdefault(
-        task_status_id,
-        {
-            "name": task_status_short_name,
-            "color": task_status_color,
-            "count": 0,
-            "frames": 0,
-        },
-    )
-    results["all"][task_type_id][task_status_id]["count"] += task_count or 0
-    results["all"][task_type_id][task_status_id]["frames"] += (
-        entity_nb_frames or 0
-    )
-
-    results["all"]["all"].setdefault(
-        task_status_id,
-        {
-            "name": task_status_short_name,
-            "color": task_status_color,
-            "count": 0,
-            "frames": 0,
-        },
-    )
-    results["all"]["all"][task_status_id]["count"] += task_count or 0
-    results["all"]["all"][task_status_id]["frames"] += entity_nb_frames or 0
 
 
 def get_preview_dimensions(project):
@@ -1107,3 +1015,14 @@ def get_shot_versions(shot_id):
         .all()
     )
     return EntityVersion.serialize_list(versions, obj_type="ShotVersion")
+
+
+def get_base_entity_type_name(entity_dict):
+    type_name = "Asset"
+    if is_shot(entity_dict):
+        type_name = "Shot"
+    elif is_sequence(entity_dict):
+        type_name = "Sequence"
+    elif is_episode(entity_dict):
+        type_name = "Episode"
+    return type_name

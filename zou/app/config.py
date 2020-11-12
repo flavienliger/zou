@@ -3,11 +3,12 @@ import datetime
 
 from zou.app.utils import dbhelpers
 
+PROPAGATE_EXCEPTIONS = True
+RESTFUL_JSON = {"ensure_ascii": False}
+DEBUG = os.getenv("DEBUG", 0)
+
 APP_NAME = "Zou"
 APP_SYSTEM_ERROR_SUBJECT_LINE = "%s system error" % APP_NAME
-PROPAGATE_EXCEPTIONS = True
-
-DEBUG = os.getenv("DEBUG", 0)
 SECRET_KEY = os.getenv("SECRET_KEY", "mysecretkey")
 
 AUTH_STRATEGY = os.getenv("AUTH_STRATEGY", "auth_local_classic")
@@ -32,7 +33,6 @@ JWT_REFRESH_COOKIE_PATH = "/auth/refresh-token"
 JWT_COOKIE_CSRF_PROTECT = False
 JWT_SESSION_COOKIE = False
 
-RESTFUL_JSON = {"ensure_ascii": False}
 DATABASE = {
     "drivername": os.getenv("DB_DRIVER", "postgresql"),
     "host": os.getenv("DB_HOST", "localhost"),
@@ -61,12 +61,19 @@ FILE_TREE_FOLDER = os.getenv("FILE_TREE_FOLDER")
 PREVIEW_FOLDER = os.getenv(
     "PREVIEW_FOLDER", os.getenv("THUMBNAIL_FOLDER", "previews")
 )
+TMP_DIR = os.getenv("TMP_DIR", os.path.join(os.sep, "tmp", "zou"))
+
+EVENT_STREAM_HOST = os.getenv("EVENT_STREAM_HOST", "localhost")
+EVENT_STREAM_PORT = os.getenv("EVENT_STREAM_PORT", 5001)
+EVENT_HANDLERS_FOLDER = os.getenv(
+    "EVENT_HANDLERS_FOLDER", os.path.join(os.getcwd(), "event_handlers")
+)
 
 MAIL_SERVER = os.getenv("MAIL_SERVER", "localhost")
 MAIL_PORT = os.getenv("MAIL_PORT", 25)
 MAIL_USERNAME = os.getenv("MAIL_USERNAME", "")
 MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
-MAIL_DEBUG = os.getenv("MAIL_DEBUG", 0)
+MAIL_DEBUG = os.getenv("MAIL_DEBUG", 0) != 0
 MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "False").lower() == "true"
 MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "False").lower() == "true"
 MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "no-reply@cg-wire.com")
@@ -90,6 +97,10 @@ FS_SWIFT_USER = os.getenv("FS_SWIFT_USER")
 FS_SWIFT_TENANT_NAME = os.getenv("FS_SWIFT_TENANT_NAME")
 FS_SWIFT_KEY = os.getenv("FS_SWIFT_KEY")
 FS_SWIFT_REGION_NAME = os.getenv("FS_SWIFT_REGION_NAME")
+FS_S3_REGION = os.getenv("FS_S3_REGION")
+FS_S3_ENDPOINT = os.getenv("FS_S3_ENDPOINT")
+FS_S3_ACCESS_KEY = os.getenv("FS_S3_ACCESS_KEY")
+FS_S3_SECRET_KEY = os.getenv("FS_S3_SECRET_KEY")
 
 LDAP_HOST = os.getenv("LDAP_HOST", "127.0.0.1")
 LDAP_PORT = os.getenv("LDAP_PORT", "389")
@@ -105,3 +116,11 @@ LOGS_PORT = os.getenv("LOGS_PORT", 2202)
 LOGS_TOKEN = os.getenv("LOGS_TOKEN")
 
 CRISP_TOKEN = os.getenv("CRISP_TOKEN", "")
+
+# Deprecated
+DONE_TASK_STATUS = "Done"
+WIP_TASK_STATUS = "WIP"
+TO_REVIEW_TASK_STATUS = "To review"
+DEFAULT_FILE_STATUS = "To review"
+DEFAULT_FILE_TREE = os.getenv("DEFAULT_FILE_TREE", "default")
+FILE_TREE_FOLDER = os.getenv("FILE_TREE_FOLDER")

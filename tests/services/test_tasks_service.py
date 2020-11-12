@@ -6,7 +6,8 @@ from tests.base import ApiDBTestCase
 from zou.app.models.task import Task
 from zou.app.models.task_type import TaskType
 from zou.app.models.time_spent import TimeSpent
-from zou.app.services import tasks_service, deletion_service
+from zou.app.models.preview_file import PreviewFile
+from zou.app.services import comments_service, deletion_service, tasks_service
 from zou.app.utils import events, fields
 
 from zou.app.services.exception import TaskNotFoundException
@@ -50,7 +51,8 @@ class TaskServiceTestCase(ApiDBTestCase):
         self.generate_fixture_output_type()
         self.generate_fixture_output_file()
 
-        self.task_id = self.task.id
+        self.project_id = str(self.project.id)
+        self.task_id = str(self.task.id)
         self.open_status_id = self.task_status.id
         self.wip_status_id = self.task_status_wip.id
         self.to_review_status_id = self.task_status_to_review.id
@@ -93,6 +95,20 @@ class TaskServiceTestCase(ApiDBTestCase):
         task_type = self.task_type.serialize()
         status = tasks_service.get_todo_status()
         task = tasks_service.create_task(task_type, shot)
+        task = tasks_service.get_task(task["id"])
+        self.assertEqual(task["entity_id"], shot["id"])
+        self.assertEqual(task["task_type_id"], task_type["id"])
+        self.assertEqual(task["project_id"], shot["project_id"])
+        self.assertEqual(task["task_status_id"], status["id"])
+
+    def test_create_tasks(self):
+        shot = self.shot.serialize()
+        shot_2 = self.generate_fixture_shot("S02").serialize()
+        task_type = self.task_type.serialize()
+        status = tasks_service.get_todo_status()
+        tasks = tasks_service.create_tasks(task_type, [shot, shot_2])
+        self.assertEqual(len(tasks), 2)
+        task = tasks[0]
         task = tasks_service.get_task(task["id"])
         self.assertEqual(task["entity_id"], shot["id"])
         self.assertEqual(task["task_type_id"], task_type["id"])
@@ -343,13 +359,13 @@ class TaskServiceTestCase(ApiDBTestCase):
         tasks = tasks_service.get_person_tasks(self.user["id"], projects)
         self.assertEqual(len(tasks), 1)
 
-        tasks_service.create_comment(
+        comments_service.new_comment(
             self.task.id,
             self.task_status.id,
             self.person.id,
             "first comment"
         )
-        tasks_service.create_comment(
+        comments_service.new_comment(
             self.task.id,
             self.task_status.id,
             self.person.id,
@@ -400,8 +416,26 @@ class TaskServiceTestCase(ApiDBTestCase):
             self.task_id
         )
 
+    def test_remove_tasks(self):
+        self.working_file.delete()
+        self.output_file.delete()
+        task_id = str(self.task_id)
+        task2_id = str(self.generate_fixture_task("main 2").id)
+        task_ids = [task_id, task2_id]
+        deletion_service.remove_tasks(self.project_id, task_ids)
+        self.assertRaises(
+            TaskNotFoundException,
+            tasks_service.get_task,
+            task_id
+        )
+        self.assertRaises(
+            TaskNotFoundException,
+            tasks_service.get_task,
+            task2_id
+        )
+
     def test_remove_task_force(self):
-        tasks_service.create_comment(
+        comments_service.new_comment(
             self.task.id,
             self.task_status.id,
             self.person.id,
@@ -437,12 +471,12 @@ class TaskServiceTestCase(ApiDBTestCase):
         self.assertIsNotNone(Task.get(task_4_id))
 
     def test_get_comment_mentions(self):
-        mentions = tasks_service.get_comment_mentions(
+        mentions = comments_service.get_comment_mentions(
             self.task_id,
             "Test @Emma Doe"
         )
         self.assertEqual(len(mentions), 0)
-        mentions = tasks_service.get_comment_mentions(
+        mentions = comments_service.get_comment_mentions(
             self.task_id,
             "Test @John Doe"
         )
@@ -461,8 +495,8 @@ class TaskServiceTestCase(ApiDBTestCase):
         comments = tasks_service.get_comments(self.task_id, is_client=True)
         self.assertEqual(len(comments), 1)
 
-    def test_create_comment(self):
-        comment = tasks_service.create_comment(
+    def test_new_comment(self):
+        comment = comments_service.new_comment(
             self.task_id,
             self.task_status.id,
             self.person.id,
@@ -480,3 +514,41 @@ class TaskServiceTestCase(ApiDBTestCase):
 
         task = tasks_service.get_full_task(self.shot_task.id)
         self.assertEqual(task["sequence"]["id"], str(self.sequence.id))
+
+    def test_get_next_position(self):
+        self.generate_fixture_preview_file(revision=1)
+        self.generate_fixture_preview_file(revision=2)
+        self.generate_fixture_preview_file(revision=2, name="second")
+        task_id = self.task.id
+        position = tasks_service.get_next_position(task_id, 2)
+        self.assertEqual(position, 3)
+
+    def test_update_preview_file_position(self):
+        self.generate_fixture_preview_file(revision=1)
+        self.generate_fixture_preview_file(revision=2)
+        preview_file = \
+            self.generate_fixture_preview_file(revision=2, name="second")
+        preview_file_id = str(preview_file.id)
+        self.generate_fixture_preview_file(revision=2, name="third")
+
+        tasks_service.update_preview_file_position(preview_file_id, 1)
+        preview_files = (
+            PreviewFile
+            .query
+            .filter_by(task_id=self.task_id, revision=2)
+            .order_by(PreviewFile.position)
+        )
+        for (i, preview_file) in enumerate(preview_files):
+            self.assertEqual(preview_file.position, i + 1)
+        self.assertEqual(str(preview_files[0].id), preview_file_id)
+
+        tasks_service.update_preview_file_position(preview_file_id, 3)
+        preview_files = (
+            PreviewFile
+            .query
+            .filter_by(task_id=self.task_id, revision=2)
+            .order_by(PreviewFile.position)
+        )
+        for (i, preview_file) in enumerate(preview_files):
+            self.assertEqual(preview_file.position, i + 1)
+        self.assertEqual(str(preview_files[2].id), preview_file_id)

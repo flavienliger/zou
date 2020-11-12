@@ -105,6 +105,7 @@ def get_first_shot_preview_file_id(playlist):
     first_shot_preview_file_id = None
     if playlist.shots is not None \
        and len(playlist.shots) > 0 \
+       and type(playlist.shots) == list \
        and "preview_file_id" in playlist.shots[0]:
         first_shot_preview_file_id = playlist.shots[0]["preview_file_id"]
     return first_shot_preview_file_id
@@ -203,7 +204,7 @@ def set_preview_files_for_entities(playlist_dict):
             "annotations": preview_file.annotations,
             "created_at": fields.serialize_value(preview_file.created_at),
             "task_id": task_id,
-        } # Do not add too much field to avoid building too big responses
+        }  # Do not add too much field to avoid building too big responses
         previews[entity_id][task_type_id].append(light_preview_file)
         preview_file_map[preview_file_id] = light_preview_file
 
@@ -234,6 +235,8 @@ def get_preview_files_for_entity(entity_id):
         .add_columns(
             PreviewFile.id,
             PreviewFile.revision,
+            PreviewFile.position,
+            PreviewFile.original_name,
             PreviewFile.extension,
             PreviewFile.annotations,
             PreviewFile.created_at,
@@ -252,6 +255,8 @@ def get_preview_files_for_entity(entity_id):
         task,
         preview_file_id,
         preview_file_revision,
+        preview_file_position,
+        preview_file_original_name,
         preview_file_extension,
         preview_file_annotations,
         preview_file_created_at,
@@ -263,6 +268,8 @@ def get_preview_files_for_entity(entity_id):
         task_previews[task_id].append(fields.serialize_dict({
             "id": preview_file_id,
             "revision": preview_file_revision,
+            "position": preview_file_position,
+            "original_name": preview_file_original_name,
             "extension": preview_file_extension,
             "annotations": preview_file_annotations,
             "created_at": preview_file_created_at,
@@ -280,6 +287,7 @@ def get_preview_files_for_entity(entity_id):
                 {
                     "id": preview_file["id"],
                     "revision": preview_file["revision"],
+                    "original_name": preview_file["original_name"],
                     "extension": preview_file["extension"],
                     "annotations": preview_file["annotations"],
                     "previews": preview_file["previews"],
@@ -333,9 +341,9 @@ def retrieve_playlist_tmp_files(playlist, only_movies=False):
     preview_files = []
     for entity in playlist["shots"]:
         if (
-            "preview_file_id" in entity
-            and entity["preview_file_id"] is not None
-            and len(entity["preview_file_id"]) > 0
+            "preview_file_id" in entity and
+            entity["preview_file_id"] is not None and
+            len(entity["preview_file_id"]) > 0
         ):
             preview_file = files_service.get_preview_file(
                 entity["preview_file_id"]
@@ -442,6 +450,7 @@ def start_build_job(playlist):
             "playlist_id": playlist["id"],
             "created_at": fields.serialize_value(job.created_at),
         },
+        project_id=playlist["project_id"]
     )
     return job.serialize()
 
@@ -463,6 +472,7 @@ def end_build_job(playlist, job, result):
             "playlist_id": playlist["id"],
             "status": status,
         },
+        project_id=playlist["project_id"]
     )
     return build_job.serialize()
 
@@ -554,7 +564,11 @@ def remove_playlist(playlist_id):
     for job in query.all():
         remove_build_job(playlist_dict, job.id)
     playlist.delete()
-    events.emit("playlist:delete", {"playlist_id": playlist_dict["id"]})
+    events.emit(
+        "playlist:delete",
+        {"playlist_id": playlist_dict["id"]},
+        project_id=playlist_dict["project_id"]
+    )
     return playlist_dict
 
 
@@ -577,6 +591,7 @@ def remove_build_job(playlist, build_job_id):
     events.emit(
         "build-job:delete",
         {"build_job_id": build_job_id, "playlist_id": playlist["id"]},
+        project_id=playlist["project_id"]
     )
     return movie_file_path
 

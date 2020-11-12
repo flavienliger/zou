@@ -16,19 +16,10 @@ from .base import BaseModelResource, BaseModelsResource
 
 
 class EntityEventMixin(object):
-    def get_type_name(self, entity_dict):
-        type_name = "asset"
-        if shots_service.is_shot(entity_dict):
-            type_name = "shot"
-        elif shots_service.is_sequence(entity_dict):
-            type_name = "sequence"
-        elif shots_service.is_episode(entity_dict):
-            type_name = "episode"
-        return type_name
 
     def emit_event(self, event_name, entity_dict, data={}):
         instance_id = entity_dict["id"]
-        type_name = self.get_type_name(entity_dict)
+        type_name = shots_service.get_base_entity_type_name(entity_dict)
         if event_name in ["update", "delete"]:
             if type_name == "shot":
                 shots_service.clear_shot_cache(instance_id)
@@ -36,13 +27,13 @@ class EntityEventMixin(object):
                 assets_service.clear_asset_cache(instance_id)
         content = {
             "%s_id" % type_name: instance_id,
-            "project_id": entity_dict["project_id"],
             type_name: entity_dict,
         }
         content.update(data)
         events.emit(
             "%s:%s" % (type_name, event_name),
             content,
+            project_id=entity_dict["project_id"]
         )
 
 
@@ -52,6 +43,14 @@ class EntitiesResource(BaseModelsResource, EntityEventMixin):
 
     def check_create_permissions(self, entity):
         user_service.check_manager_project_access(entity["project_id"])
+
+    def all_entries(self, query=None, relations=False):
+        entities = BaseModelsResource.all_entries(
+            self, query=query, relations=relations
+        )
+        for entity in entities:
+            entity["type"] = shots_service.get_base_entity_type_name(entity)
+        return entities
 
 
 class EntityResource(BaseModelResource, EntityEventMixin):
@@ -65,6 +64,11 @@ class EntityResource(BaseModelResource, EntityEventMixin):
             "type",
             "shotgun_id",
         ]
+
+    def serialize_instance(self, entity):
+        entity = entity.serialize(relations=True)
+        entity["type"] = shots_service.get_base_entity_type_name(entity)
+        return entity
 
     def check_read_permissions(self, entity):
         user_service.check_project_access(entity["project_id"])

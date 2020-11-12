@@ -43,10 +43,10 @@ class EntityLink(db.Model, BaseMixin, SerializerMixin):
             entity_out_id=data["entity_out_id"],
         )
         if entity_link is None:
-            return cls.create(**data)
+            return cls.create(**data), False
         else:
             entity_link.update(data)
-            return entity_link
+            return entity_link, True
 
 
 class Entity(db.Model, BaseMixin, SerializerMixin):
@@ -130,6 +130,7 @@ class Entity(db.Model, BaseMixin, SerializerMixin):
 
     @classmethod
     def create_from_import(cls, data):
+        is_update = False
         previous_entity = cls.get(data["id"])
         (data, entity_ids) = cls.sanitize_import_data(data)
 
@@ -137,13 +138,14 @@ class Entity(db.Model, BaseMixin, SerializerMixin):
             previous_entity = cls.create(**data)
             previous_entity.save()
         else:
+            is_update = True
             previous_entity.update(data)
             previous_entity.save()
 
         if entity_ids is not None:
             previous_entity.set_entities_out(entity_ids)
 
-        return previous_entity
+        return (previous_entity, is_update)
 
     @classmethod
     def sanitize_import_data(self, data):

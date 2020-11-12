@@ -23,7 +23,7 @@ from zou.app.models.task import Task
 from zou.app.models.time_spent import TimeSpent
 from zou.app.models.working_file import WorkingFile
 
-from zou.app.utils import events
+from zou.app.utils import events, fields
 from zou.app.stores import file_store
 
 from zou.app.services.exception import (
@@ -34,6 +34,7 @@ from zou.app.services.exception import (
 
 def remove_comment(comment_id):
     comment = Comment.get(comment_id)
+    task = Task.get(comment.object_id)
     if comment is not None:
         notifications = Notification.query.filter_by(comment_id=comment.id)
         for notification in notifications:
@@ -55,8 +56,13 @@ def remove_comment(comment_id):
         for preview in previews:
             remove_preview_file(preview)
 
-        events.emit("comment:delete", {"comment_id": comment.id})
-        return comment.serialize()
+        if task is not None:
+            events.emit(
+                "comment:delete",
+                {"comment_id": comment.id},
+                project_id=str(task.project_id)
+            )
+            return comment.serialize()
     else:
         raise CommentNotFoundException
 
@@ -66,6 +72,7 @@ def remove_task(task_id, force=False):
     Remove given task. Force deletion if the task has some comments and files
     related. This will lead to the deletion of all of them.
     """
+    from zou.app.services import tasks_service
     task = Task.get(task_id)
     if force:
         working_files = WorkingFile.query.filter_by(task_id=task_id)
@@ -108,7 +115,12 @@ def remove_task(task_id, force=False):
             news.delete()
 
     task.delete()
-    events.emit("task:delete", {"task_id": task_id})
+    tasks_service.clear_task_cache(task_id)
+    events.emit(
+        "task:delete",
+        {"task_id": task_id},
+        project_id=str(task.project_id)
+    )
     return task.serialize()
 
 
@@ -189,6 +201,24 @@ def clear_generic_files(preview_file_id):
         pass
 
 
+def remove_tasks(project_id, task_ids):
+    """
+    Remove fully given tasks and related for given project. The project id
+    filter is there to facilitate right management.
+    """
+    task_ids = [
+        task_id for task_id in task_ids if fields.is_valid_id(task_id)
+    ]
+    tasks = (
+        Task.query
+        .filter(Project.id == project_id)
+        .filter(Task.id.in_(task_ids))
+    )
+    for task in tasks:
+        remove_task(task.id, force=True)
+    return task_ids
+
+
 def remove_tasks_for_project_and_task_type(project_id, task_type_id):
     """
     Remove fully all tasks and related for given project and task type.
@@ -228,6 +258,7 @@ def remove_project(project_id):
     for playlist in playlists:
         playlists_service.remove_playlist(playlist.id)
 
+    ApiEvent.delete_all_by(project_id=project_id)
     Entity.delete_all_by(project_id=project_id)
     MetadataDescriptor.delete_all_by(project_id=project_id)
     Milestone.delete_all_by(project_id=project_id)

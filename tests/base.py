@@ -10,6 +10,7 @@ from zou.app import app
 from zou.app.utils import fields, auth, fs
 from zou.app.services import (
     breakdown_service,
+    comments_service,
     file_tree_service,
     tasks_service
 )
@@ -381,7 +382,7 @@ class ApiDBTestCase(ApiTestCase):
         )
         return self.episode
 
-    def generate_fixture_shot(self, name="P01"):
+    def generate_fixture_shot(self, name="P01", nb_frames=0):
         self.shot = Entity.create(
             name=name,
             description="Description Shot 01",
@@ -392,7 +393,8 @@ class ApiDBTestCase(ApiTestCase):
             },
             project_id=self.project.id,
             entity_type_id=self.shot_type.id,
-            parent_id=self.sequence.id
+            parent_id=self.sequence.id,
+            nb_frames=nb_frames
         )
         return self.shot
 
@@ -601,6 +603,7 @@ class ApiDBTestCase(ApiTestCase):
             short_name="opn",
             color="#FFFFFF"
         )
+        return self.task_status
 
     def generate_fixture_task_status_wip(self):
         self.task_status_wip = TaskStatus.create(
@@ -608,6 +611,7 @@ class ApiDBTestCase(ApiTestCase):
             short_name="wip",
             color="#FFFFFF"
         )
+        return self.task_status_wip
 
     def generate_fixture_task_status_to_review(self):
         self.task_status_to_review = TaskStatus.create(
@@ -615,6 +619,7 @@ class ApiDBTestCase(ApiTestCase):
             short_name="pndng",
             color="#FFFFFF"
         )
+        return self.task_status_to_review
 
     def generate_fixture_task_status_retake(self):
         self.task_status_retake = TaskStatus.create(
@@ -623,6 +628,7 @@ class ApiDBTestCase(ApiTestCase):
             color="#FFFFFF",
             is_retake=True
         )
+        return self.task_status_retake
 
     def generate_fixture_task_status_done(self):
         self.task_status_done = TaskStatus.create(
@@ -631,20 +637,28 @@ class ApiDBTestCase(ApiTestCase):
             color="#FFFFFF",
             is_done=True
         )
+        return self.task_status_done
 
     def generate_fixture_task_status_todo(self):
-        self.task_status_done = TaskStatus.create(
+        self.task_status_todo = TaskStatus.create(
             name="Todo",
             short_name="todo",
             color="#FFFFFF"
         )
+        return self.task_status_todo
 
     def generate_fixture_assigner(self):
         self.assigner = Person.create(first_name="Ema", last_name="Peel")
+        return self.assigner
 
-    def generate_fixture_task(self, name="Master", asset_id=None):
-        if asset_id is None:
-            asset_id = self.asset.id
+    def generate_fixture_task(
+        self, name="Master", entity_id=None, task_type_id=None
+    ):
+        if entity_id is None:
+            entity_id = self.asset.id
+
+        if task_type_id is None:
+            task_type_id = self.task_type.id
 
         start_date = fields.get_date_object("2017-02-20")
         due_date = fields.get_date_object("2017-02-28")
@@ -652,9 +666,9 @@ class ApiDBTestCase(ApiTestCase):
         self.task = Task.create(
             name=name,
             project_id=self.project.id,
-            task_type_id=self.task_type.id,
+            task_type_id=task_type_id,
             task_status_id=self.task_status.id,
-            entity_id=asset_id,
+            entity_id=entity_id,
             assignees=[self.person],
             assigner_id=self.assigner.id,
             duration=50,
@@ -760,12 +774,21 @@ class ApiDBTestCase(ApiTestCase):
         self.project.save()
         return self.shot_task_standard
 
-    def generate_fixture_comment(self, person=None):
+    def generate_fixture_comment(
+        self,
+        person=None,
+        task_id=None,
+        task_status_id=None
+    ):
         if person is None:
             person = self.person.serialize()
-        self.comment = tasks_service.create_comment(
-            self.task.id,
-            self.task_status.id,
+        if task_id is None:
+            task_id = self.task_id
+        if task_status_id is None:
+            task_status_id = self.task_status_id
+        self.comment = comments_service.new_comment(
+            task_id,
+            task_status_id,
             person["id"],
             "first comment"
         )
@@ -905,15 +928,18 @@ class ApiDBTestCase(ApiTestCase):
             use_original_file_name=False
         )
 
-    def generate_fixture_preview_file(self, revision=1):
+    def generate_fixture_preview_file(
+        self, revision=1, name="main", position=1
+    ):
         self.preview_file = PreviewFile.create(
-            name="main",
+            name=name,
             revision=revision,
             description="test description",
             source="pytest",
             task_id=self.task.id,
             extension="mp4",
-            person_id=self.person.id
+            person_id=self.person.id,
+            position=position
         )
         return self.preview_file
 
@@ -1018,6 +1044,14 @@ class ApiDBTestCase(ApiTestCase):
         self.generate_fixture_sequence()
         self.generate_fixture_shot()
         self.generate_fixture_scene()
+
+    def assign_task(self, task_id, user_id):
+        return tasks_service.assign_task(task_id, user_id)
+
+    def assign_task_to_artist(self, task_id):
+        if self.user_cg_artist is None:
+            self.generate_fixture_user_cg_artist()
+        self.assign_task(task_id, self.user_cg_artist["id"])
 
     def now(self):
         return datetime.datetime.now().replace(microsecond=0).isoformat()
