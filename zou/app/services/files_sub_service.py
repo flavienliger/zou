@@ -90,12 +90,16 @@ def get_last_working_files_for_task(task_id):
     return working_files_by_name
 
 
-def get_next_working_revision(task_id, name):
+def get_next_working_revision(name, task_id=None, entity_id=None):
     """
     Get next working file revision for given task and name.
     """
+    print("get_next", name, task_id, entity_id)
+    if not task_id and not entity_id:
+        return 1
+
     working_files = (
-        WorkingFile.query.filter_by(task_id=task_id, name=name)
+        WorkingFile.query.filter_by(task_id=task_id, entity_id=entity_id, name=name)
         .order_by(desc(WorkingFile.revision))
         .all()
     )
@@ -114,9 +118,10 @@ def get_working_file_by_path(path):
 
 
 def create_new_working_revision(
-    task_id,
     person_id,
     software_id,
+    entity_id=None,
+    task_id=None,
     name="main",
     path="",
     comment="",
@@ -126,9 +131,13 @@ def create_new_working_revision(
     Create a new working file revision for given task. An author (user) and
     a software are required.
     """
-    task = Task.get(task_id)
+
+    if task_id:
+        task = Task.get(task_id)
+        entity_id = task.entity_id
+
     if revision == 0:
-        revision = get_next_working_revision(task_id, name)
+        revision = get_next_working_revision(name, task_id=task_id, entity_id=entity_id)
 
     if path:
         previous_working_file = get_working_file_by_path(path)
@@ -141,9 +150,9 @@ def create_new_working_revision(
             name=name,
             revision=revision,
             path=path,
-            task_id=task.id,
+            task_id=task_id,
             software_id=software_id,
-            entity_id=task.entity_id,
+            entity_id=entity_id,
             person_id=person_id,
         )
         events.emit("working_file:new", {"working_file_id": working_file.id})

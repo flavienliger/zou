@@ -355,7 +355,7 @@ class NewWorkingFileResource(Resource):
     """
 
     @jwt_required
-    def post(self, task_id):
+    def post(self, entity_id):
         (
             name,
             path,
@@ -368,24 +368,30 @@ class NewWorkingFileResource(Resource):
             sep,
             size
         ) = self.get_arguments()
+        task_id = None
 
+        # try by task
         try:
-            task = tasks_service.get_task(task_id)
+            task = tasks_service.get_task(entity_id)
+            task_id = entity_id
+            entity_id = task["entity_id"]
             user_service.check_project_access(task["project_id"])
             user_service.check_entity_access(task["entity_id"])
             tasks_service.assign_task(
                 task_id, persons_service.get_current_user()["id"]
             )
+        except:
+            # try by entity
+            entity = entities_service.get_entity(entity_id)
+            user_service.check_project_access(entity["project_id"])
+            user_service.check_entity_access(entity_id)
 
-            if revision == 0:
-                revision = files_service.get_next_working_revision(
-                    task_id, name
-                )
-
+        try:
             working_file = files_service.create_new_working_revision(
-                task_id,
                 person_id,
                 software_id,
+                task_id=task_id,
+                entity_id=entity_id,
                 name=name,
                 path=path,
                 comment=comment,
