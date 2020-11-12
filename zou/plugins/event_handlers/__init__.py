@@ -1,7 +1,17 @@
-from zou.plugins.event_handlers import output_file_new, generate_children
+from zou.app.events import celery
+from zou.app.services.playlists_service import build_playlist_job
+from zou.app.utils import emails, chats
 
-event_map = {
-    "output_file:new": output_file_new.handle_event,
-    "children_file:new": generate_children.handle_event,
-    "children-file:update": generate_children.handle_event
-}
+# Celery tasks
+
+@celery.task
+def build_playlist_task(playlist, email):
+    build_playlist_job(playlist, email)
+
+@celery.task
+def send_email_task(subject, message, email):
+    emails.send_email(subject, message, email)
+
+@celery.task
+def send_to_slack_task(token, user, message):
+    chats.send_to_slack(token, user, message)

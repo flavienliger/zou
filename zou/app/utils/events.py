@@ -6,6 +6,7 @@ from zou.app.stores import publisher_store
 from zou.app.models.event import ApiEvent
 from zou.app.utils import fields
 
+import event_handlers
 
 handlers = {}
 
@@ -63,7 +64,7 @@ def emit(event, data={}, persist=True):
     It publishes too the event to other services
     (like the realtime event daemon).
     """
-    event_handlers = handlers.get(event, {})
+    # event_handlers = handlers.get(event, {})
     data = fields.serialize_dict(data)
     publisher_store.publish(event, data)
     if persist:
@@ -71,14 +72,20 @@ def emit(event, data={}, persist=True):
 
     from zou.app.config import ENABLE_JOB_QUEUE
 
-    for func in event_handlers.values():
-        if ENABLE_JOB_QUEUE:
-            func.delay(data)
-        else:
-            try:
-                func(data)
-            except Exception:
-                current_app.logger.error("Error handling event", exc_info=1)
+    # move to listen_event for avoid to refresh Zou after an update
+    try:
+        event_handlers.listen_event_task.delay(event, data)
+    except Exception:
+        current_app.logger.error("Error handling event", exc_info=1)
+
+    # for func in event_handlers.values():
+    #     if ENABLE_JOB_QUEUE:
+    #         func.delay(data)
+    #     else:
+    #         try:
+    #             func(data)
+    #         except Exception:
+    #             current_app.logger.error("Error handling event", exc_info=1)
 
 
 def save_event(event, data):

@@ -23,6 +23,8 @@ from .utils import fs, logs
 
 from zou.app.utils import cache
 
+import sys
+sys.path.insert(0, config.EVENT_HANDLERS_FOLDER)
 
 app = Flask(__name__)
 app.config.from_object(config)

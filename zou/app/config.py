@@ -75,7 +75,7 @@ DOMAIN_PROTOCOL = os.getenv("DOMAIN_PROTOCOL", "https")
 
 PLUGIN_FOLDER = os.getenv("PLUGIN_FOLDER", os.path.join(os.getcwd(), "plugins"))
 EVENT_HANDLERS_FOLDER = os.getenv(
-    "EVENT_HANDLERS_FOLDER", os.path.join(os.getcwd(), "event_handlers")
+    "EVENT_HANDLERS_FOLDER", os.path.join(os.getcwd(), "zou", "plugins")
 )
 TMP_DIR = os.getenv("TMP_DIR", os.path.join(os.sep, "tmp", "zou"))
 
