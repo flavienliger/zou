@@ -57,37 +57,31 @@ def unregister_all():
     handlers = {}
 
 
-def emit(event, data={}, persist=True, project_id=None):
+def emit(event, data=None, persist=True, project_id=None):
     """
     Emit an event which leads to the execution of all event handlers registered
     for that event name.
     It publishes too the event to other services
     (like the realtime event daemon).
     """
-    # event_handlers = handlers.get(event, {})
+
+    if not data:
+        data = {}
+
     if project_id is not None:
         data["project_id"] = project_id
+
     data = fields.serialize_dict(data)
     publisher_store.publish(event, data)
+
     if persist:
         save_event(event, data, project_id=project_id)
-
-    from zou.app.config import ENABLE_JOB_QUEUE
 
     # move to listen_event for avoid to refresh Zou after an update
     try:
         event_handlers.listen_event_task.delay(event, data)
     except Exception:
         current_app.logger.error("Error handling event", exc_info=1)
-
-    # for func in event_handlers.values():
-    #     if ENABLE_JOB_QUEUE:
-    #         func.delay(data)
-    #     else:
-    #         try:
-    #             func(data)
-    #         except Exception:
-    #             current_app.logger.error("Error handling event", exc_info=1)
 
 
 def save_event(event, data, project_id=None):

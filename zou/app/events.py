@@ -1,3 +1,4 @@
+# Not used - it exists only for an example
 import redis
 import sys
 

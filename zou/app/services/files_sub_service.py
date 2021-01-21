@@ -94,7 +94,6 @@ def get_next_working_revision(name, task_id=None, entity_id=None):
     """
     Get next working file revision for given task and name.
     """
-    print("get_next", name, task_id, entity_id)
     if not task_id and not entity_id:
         return 1
 
@@ -155,7 +154,11 @@ def create_new_working_revision(
             entity_id=entity_id,
             person_id=person_id,
         )
-        events.emit("working_file:new", {"working_file_id": working_file.id})
+        events.emit(
+            "working_file:new", 
+            {"working_file_id": working_file.id},
+            project_id=str(task.project_id)
+        )
     except IntegrityError:
         raise EntryAlreadyExistsException
 
@@ -176,7 +179,9 @@ def get_working_files_for_task(task_id):
     return fields.serialize_models(working_files)
 
 
-def get_working_files_for_entity(entity_id, task_id=None, name=None):
+def get_working_files_for_entity(
+    entity_id, task_id=None, name=None, relations=False
+):
     """
     Retrieve all working files for a given entity and specified parameters
     ordered by revision from biggest to smallest revision.
@@ -193,7 +198,7 @@ def get_working_files_for_entity(entity_id, task_id=None, name=None):
     )
 
     working_files = query.all()
-    return fields.serialize_models(working_files)
+    return fields.serialize_models(working_files, relations=relations)
 
 
 def get_next_working_file_revision(task_id, name):
